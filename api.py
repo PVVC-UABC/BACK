@@ -184,3 +184,69 @@ async def root(index : int, response: Response):
         return error
     finally:
         connection.close()
+
+@app.get("/getEspecialidades")
+async def root(response: Response):
+    try:
+        connection = pymysql.connect(
+            host='proyectosfcqi.tij.uabc.mx',
+            port=3306,
+            user='becerra20242',
+            password='2532',
+            db='bd1becerra20242'
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Departamento")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            else:
+                return result
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.post("/postEspecialidad/{nombre}/{descripcion}")
+async def root(nombre : str, descripcion : str, response: Response):
+    try:
+        connection = pymysql.connect(
+            host='proyectosfcqi.tij.uabc.mx',
+            port=3306,
+            user='becerra20242',
+            password='2532',
+            db='bd1becerra20242'
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO Departamento (nombre, descripcion) VALUES (%s, %s)", (nombre, descripcion))
+            connection.commit()
+            response.status_code = status.HTTP_200_OK
+            return {"message": "Especialidad insertada correctamente"}
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.delete("/deleteEspecialidad/{index}")
+async def root(index : int, response: Response):
+    try:
+        connection = pymysql.connect(
+            host='proyectosfcqi.tij.uabc.mx',
+            port=3306,
+            user='becerra20242',
+            password='2532',
+            db='bd1becerra20242'
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM Departamento WHERE idDepartamento = %s", (index))
+            connection.commit()
+            response.status_code = status.HTTP_200_OK
+            return {"message": "Especialidad eliminada correctamente"}
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
