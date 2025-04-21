@@ -230,6 +230,8 @@ async def root(index : int, response: Response):
     finally:
         connection.close()
         
+
+#asd
 @app.post("/postEspecialidad/{nombre}")
 async def root(nombre : str, response: Response):
     try:
