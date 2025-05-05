@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+#!/home/karsam/code/BACK/.venv/bin/python
+=======
 #!/home/Karsam/code/BACK/.venv/bin/python3
+>>>>>>> 1ececf303ca051cd8243645de6d6347e0d636a3e
 # -*- coding: utf-8 -*-
 import re
 import sys
