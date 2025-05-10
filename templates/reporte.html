@@ -12,17 +12,20 @@
 </head>
 <body>
     <h1>Historial de Instrumentos</h1>
+    <p>Generado el: {{ fecha_reporte }}</p>
 
     <h2>Estado Actual de Todos los Instrumentos</h2>
     <table>
         <tr>
             <th>ID</th>
+            <th>Nombre</th>
             <th>Estado</th>
             <th>Ubicación</th>
         </tr>
         {% for instrumento in instrumentos %}
         <tr>
             <td>{{ instrumento.id }}</td>
+            <td>{{ instrumento.nombre }}</td>
             <td>{{ instrumento.estado }}</td>
             <td>{{ instrumento.ubicacion }}</td>
         </tr>
@@ -48,6 +51,5 @@
         </tr>
         {% endfor %}
     </table>
-
 </body>
 </html>
