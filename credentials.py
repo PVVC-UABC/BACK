@@ -1,16 +1,21 @@
-import pymysql
+__host='proyectosfcqi.tij.uabc.mx'
+__port=3306
+__user='becerra20242'
+__password='2532'
+__db='bd2becerra20242'
 
-host='proyectosfcqi.tij.uabc.mx'
-port=3306
-user='becerra20242'
-password='2532'
-db='bd2becerra20242'
+def get_host():
+    return __host
 
-def get_connection():
-    return pymysql.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        db=db
-    )
+def get_port():
+    return __port
+
+def get_user():
+    return __user
+
+def get_password():
+    return __password
+
+def get_db():
+    return __db
+
