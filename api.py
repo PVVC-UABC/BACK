@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Response, status
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import pymysql.cursors
 import json
 import utils
@@ -7,6 +8,16 @@ from hashlib import sha256
 from pydantic import BaseModel
 
 app = FastAPI()
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Usuario(BaseModel):
     Nombre: str
