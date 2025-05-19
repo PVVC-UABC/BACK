@@ -20,17 +20,20 @@ app.add_middleware(
 )
 
 class Usuario(BaseModel):
-    Nombre: str
+    Nombres: str
+    ApellidoPaterno: str
+    ApellidoMaterno: str
     Rol: str
     Correo: str
-    Contraseña: str
+    Contrasena: str
 
-@app.get("/getCharolas")
+
+@app.get("/getEquipos")
 async def root(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM charola")
+            cursor.execute("SELECT * FROM Equipo")
             result = cursor.fetchall()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
@@ -45,13 +48,13 @@ async def root(response: Response):
         error = "Error: " + str(e)
         return error
     
-@app.get("/getCharola/{index}")
+@app.get("/getEquipo/{index}")
 async def root(index : int, response: Response):
     try:
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM charola WHERE idCharola = %s", (index))
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
             result = cursor.fetchall()
             if not result:
                 return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
@@ -68,16 +71,16 @@ async def root(index : int, response: Response):
 @app.post("/postUsuario")
 async def crear_usuario(usuario: Usuario, response: Response):
     try:
-        if not usuario.Correo or not usuario.Contraseña:
+        if not usuario.Correo or not usuario.Contrasena:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return {"message": "Correo o contraseña vacíos"}
 
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            hashed_password = sha256(usuario.Contraseña.encode()).hexdigest()
+            hashed_password = sha256(usuario.Contrasena.encode()).hexdigest()
             cursor.execute(
-                "INSERT INTO usuario (Nombre, Rol, Correo, Contraseña) VALUES (%s, %s, %s, %s)",
-                (usuario.Nombre, usuario.Rol, usuario.Correo, hashed_password)
+                "INSERT INTO Usuario (Nombres, ApellidoPaterno, ApellidoMaterno, Rol, Correo, Contrasena) VALUES (%s, %s, %s, %s, %s, %s)",
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, hashed_password)
             )
             connection.commit()
             return {"message": "Usuario insertado correctamente"}
@@ -88,27 +91,23 @@ async def crear_usuario(usuario: Usuario, response: Response):
     finally:
         connection.close()
         
-@app.put("/updateUsuario/{index}/{campo}/{nuevoValor}")
-async def root(index : int, campo : str , nuevoValor : str , response: Response):
+@app.put("/updateUsuario/{index}")
+async def root(index: int, response: Response, usuario: Usuario):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            if campo not in ("Nombre", "Rol", "Correo", "Contraseña"):
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return {"message": "Campo no permitido"}
-            if campo == "Contraseña":
-                nuevoValor = sha256(nuevoValor.encode()).hexdigest()
-                cursor.execute("UPDATE usuario SET Contraseña = %s WHERE idUsuario = %s", (nuevoValor, index))
-                connection.commit() 
-                return JSONResponse(
-                    content={"message": "Contraseña actualizada correctamente"},
-                    media_type="application/json",
-                    status_code=status.HTTP_200_OK
-                )
-            cursor.execute(f"UPDATE usuario SET {campo} = %s WHERE idUsuario = %s", (nuevoValor, index))
+            cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No existe el usuario"}
+            cursor.execute(
+                "UPDATE Usuario SET Nombres = %s, ApellidoPaterno = %s, ApellidoMaterno = %s, Rol = %s, Correo = %s, Contrasena = %s WHERE idUsuario = %s",
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, sha256(usuario.Contrasena.encode()).hexdigest(), index)
+            )
             connection.commit()
             return JSONResponse(
-                content={"message": "Campo actualizado correctamente"},
+                content={"message": "Usuario actualizado correctamente"},
                 media_type="application/json",
                 status_code=status.HTTP_200_OK
             )
@@ -124,7 +123,7 @@ async def root(response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM usuario")
+            cursor.execute("SELECT * FROM Usuario")
             result = cursor.fetchall()
             if not result:
                 return JSONResponse(
@@ -149,7 +148,7 @@ async def root(index : int, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM usuario WHERE idUsuario = %s", (index))
+            cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
             result = cursor.fetchall()
             if not result:
                 return JSONResponse(
@@ -174,12 +173,12 @@ async def root(index : int, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM usuario WHERE idUsuario = %s", (index))
+            cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
             result = cursor.fetchall()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "No existe el usuario"}
-            cursor.execute("DELETE FROM usuario WHERE idUsuario = %s", (index))
+            cursor.execute("DELETE FROM Usuario WHERE idUsuario = %s", (index))
             connection.commit()
             return JSONResponse(
                 content={"message": "Usuario eliminado correctamente"},
@@ -198,7 +197,7 @@ async def root(response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM especialidad")
+            cursor.execute("SELECT * FROM Especialidad")
             result = cursor.fetchall()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
@@ -221,7 +220,7 @@ async def root(index : int, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM especialidad WHERE idEspecialidad = %s", (index))
+            cursor.execute("SELECT * FROM Especialidad WHERE idEspecialidad = %s", (index))
             result = cursor.fetchall()
             if not result:
                 return JSONResponse(
@@ -249,7 +248,7 @@ async def root(nombre : str, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM especialidad WHERE Nombre = %s", (nombre))
+            cursor.execute("SELECT * FROM Especialidad WHERE Nombre = %s", (nombre))
             result = cursor.fetchall()
             if result:
                 return JSONResponse(
@@ -257,7 +256,7 @@ async def root(nombre : str, response: Response):
                     media_type="application/json",
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            cursor.execute("INSERT INTO especialidad (Nombre) VALUES (%s)", (nombre))
+            cursor.execute("INSERT INTO Especialidad (Nombre) VALUES (%s)", (nombre))
             connection.commit()
             return JSONResponse(
                 content={"message": "Especialidad insertada correctamente"},
@@ -276,7 +275,7 @@ async def root(index : int, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM especialidad WHERE idEspecialidad = %s", (index))
+            cursor.execute("SELECT * FROM Especialidad WHERE idEspecialidad = %s", (index))
             result = cursor.fetchall()
             if not result:
                 return JSONResponse(
@@ -284,7 +283,7 @@ async def root(index : int, response: Response):
                     media_type="application/json",
                     status_code=status.HTTP_404_NOT_FOUND
                 )
-            cursor.execute("DELETE FROM especialidad WHERE idEspecialidad = %s", (index))
+            cursor.execute("DELETE FROM Especialidad WHERE idEspecialidad = %s", (index))
             connection.commit()
             return JSONResponse(
                 content={"message": "Especialidad eliminada correctamente"},
