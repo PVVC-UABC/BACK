@@ -27,6 +27,18 @@ class Usuario(BaseModel):
     Correo: str
     Contrasena: str
 
+@app.get("/getMemoryUsage")
+async def root(response: Response):
+    try:
+        memory_usage = utils.get_memory_usage()
+        return JSONResponse(
+            content={"memory_usage": memory_usage},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
 
 @app.get("/getEquipos")
 async def root(response: Response):
@@ -241,7 +253,6 @@ async def root(index : int, response: Response):
         connection.close()
         
 
-#asd
 @app.post("/postEspecialidad/{nombre}")
 async def root(nombre : str, response: Response):
     try:
