@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Header, Response, status
 import pymysql.cursors
 import json
 import utils
@@ -24,6 +25,13 @@ class Usuario(BaseModel):
     Rol: str
     Correo: str
     Contraseña: str
+
+class GInstrumento(BaseModel):
+    Nombre: str
+    CodigoDeBarras: str
+    Cantidad: int
+    Activo: bool
+
 
 @app.get("/getCharolas")
 async def root(response: Response):
@@ -66,7 +74,9 @@ async def root(index : int, response: Response):
     
 
 @app.post("/postUsuario")
-async def crear_usuario(usuario: Usuario, response: Response):
+async def crear_usuario(usuario: Usuario,
+                        response: Response,
+                        idusuario: int = Header(..., alias="idUsuario")):
     try:
         if not usuario.Correo or not usuario.Contraseña:
             response.status_code = status.HTTP_400_BAD_REQUEST
@@ -74,6 +84,8 @@ async def crear_usuario(usuario: Usuario, response: Response):
 
         connection = utils.get_connection()
         with connection.cursor() as cursor:
+
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
             hashed_password = sha256(usuario.Contraseña.encode()).hexdigest()
             cursor.execute(
                 "INSERT INTO usuario (Nombre, Rol, Correo, Contraseña) VALUES (%s, %s, %s, %s)",
@@ -88,27 +100,38 @@ async def crear_usuario(usuario: Usuario, response: Response):
     finally:
         connection.close()
         
-@app.put("/updateUsuario/{index}/{campo}/{nuevoValor}")
-async def root(index : int, campo : str , nuevoValor : str , response: Response):
+@app.put("/updateUsuario/{index}")
+async def root(
+    index: int,
+    usuario: Usuario,
+    response: Response,
+    idusuario: int = Header(..., alias="idUsuario")
+):
     try:
         connection = utils.get_connection()
+
         with connection.cursor() as cursor:
-            if campo not in ("Nombre", "Rol", "Correo", "Contraseña"):
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return {"message": "Campo no permitido"}
-            if campo == "Contraseña":
-                nuevoValor = sha256(nuevoValor.encode()).hexdigest()
-                cursor.execute("UPDATE usuario SET Contraseña = %s WHERE idUsuario = %s", (nuevoValor, index))
-                connection.commit() 
+            # Establecer la variable de sesión en la base de datos
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+
+            # Validar si existe el usuario
+            cursor.execute("SELECT * FROM usuario WHERE idUsuario = %s", (index,))
+            result = cursor.fetchall()
+            if not result:
                 return JSONResponse(
-                    content={"message": "Contraseña actualizada correctamente"},
+                    content={"message": "No se encontraron datos"},
                     media_type="application/json",
-                    status_code=status.HTTP_200_OK
+                    status_code=status.HTTP_404_NOT_FOUND
                 )
-            cursor.execute(f"UPDATE usuario SET {campo} = %s WHERE idUsuario = %s", (nuevoValor, index))
+
+            # Realizar la actualización
+            cursor.execute(
+                "UPDATE usuario SET Nombre = %s, Rol = %s, Correo = %s, Contraseña = %s WHERE idUsuario = %s",
+                (usuario.Nombre, usuario.Rol, usuario.Correo, usuario.Contraseña, index)
+            )
             connection.commit()
             return JSONResponse(
-                content={"message": "Campo actualizado correctamente"},
+                content={"message": "Usuario actualizado correctamente"},
                 media_type="application/json",
                 status_code=status.HTTP_200_OK
             )
@@ -170,10 +193,14 @@ async def root(index : int, response: Response):
         connection.close()
 
 @app.delete("/deleteUsuario/{index}")
-async def root(index : int, response: Response):
+async def root(index : int,
+               response: Response,
+               idusuario: int = Header(..., alias="idUsuario")):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+
             cursor.execute("SELECT * FROM usuario WHERE idUsuario = %s", (index))
             result = cursor.fetchall()
             if not result:
@@ -244,11 +271,15 @@ async def root(index : int, response: Response):
 
 #asd
 @app.post("/postEspecialidad/{nombre}")
-async def root(nombre : str, response: Response):
+async def root(nombre : str,
+               response: Response,
+               idusuario: int = Header(..., alias="idUsuario")):
     try:
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+
             cursor.execute("SELECT * FROM especialidad WHERE Nombre = %s", (nombre))
             result = cursor.fetchall()
             if result:
@@ -271,7 +302,10 @@ async def root(nombre : str, response: Response):
         connection.close()
 
 @app.delete("/deleteEspecialidad/{index}")
-async def root(index : int, response: Response):
+async def root(index : int,
+               response: Response,
+               idusuario: int = Header(..., alias="idUsuario")
+):
     try:
         connection = utils.get_connection()
 
@@ -288,6 +322,164 @@ async def root(index : int, response: Response):
             connection.commit()
             return JSONResponse(
                 content={"message": "Especialidad eliminada correctamente"},
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.get("/getInstrumentos")
+async def root(response: Response):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM GInstrumento")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            else:
+                return JSONResponse(
+                    content=utils.tokenize(result, cursor.description),
+                    media_type="application/json",
+                    status_code=status.HTTP_200_OK
+                )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.get("/getInstrumento/{index}")
+async def root(index : int, response: Response):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM GInstrumento WHERE idInstrumento = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(
+                    content={"message": "No se encontraron datos"},
+                    media_type="application/json",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.post("/postInstrumento")
+async def root(
+    instrumento: GInstrumento,
+    response: Response,
+    idusuario: int = Header(..., alias="idUsuario")
+):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+            
+            cursor.execute("SELECT * FROM GInstrumento WHERE Nombre = %s", (instrumento.Nombre))
+            result = cursor.fetchall()
+            if result:
+                return JSONResponse(
+                    content={"message": "Ya existe el instrumento"},
+                    media_type="application/json",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            cursor.execute("INSERT INTO GInstrumento (Nombre, CodigoDeBarras, Cantidad) VALUES (%s, %s, %s)", (instrumento.Nombre, instrumento.CodigoDeBarras, instrumento.Cantidad))
+            connection.commit()
+            return JSONResponse(
+                content={"message": "Instrumento insertado correctamente"},
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.put("/updateInstrumento/{index}")
+async def root(
+    index: int,
+    instrumento: GInstrumento,
+    response: Response,
+    idusuario: int = Header(..., alias="idUsuario")
+):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            # Establecer la variable de sesión en la base de datos
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+
+            # Validar si existe el instrumento
+            cursor.execute("SELECT * FROM GInstrumento WHERE idInstrumento = %s", (index,))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(
+                    content={"message": "No se encontraron datos"},
+                    media_type="application/json",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            # Realizar la actualización
+            cursor.execute(
+                "UPDATE GInstrumento SET Nombre = %s, CodigoDeBarras = %s, Cantidad = %s, Activo = %s WHERE idInstrumento = %s",
+                (instrumento.Nombre, instrumento.CodigoDeBarras, instrumento.Cantidad, instrumento.Activo, index)
+            )
+            connection.commit()
+            return JSONResponse(
+                content={"message": "Instrumento actualizado correctamente"},
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return JSONResponse(
+            content={"message": error},
+            media_type="application/json",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
+
+@app.delete("/deleteInstrumento/{index}")
+async def root(index : int,
+               response: Response,
+               idusuario: int = Header(..., alias="idUsuario")):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SET @idUsuario = %s", (idusuario,))
+
+            cursor.execute("SELECT * FROM GInstrumento WHERE idInstrumento = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(
+                    content={"message": "No existe el instrumento"},
+                    media_type="application/json",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            cursor.execute("DELETE FROM GInstrumento WHERE idInstrumento = %s", (index))
+            connection.commit()
+            return JSONResponse(
+                content={"message": "Instrumento eliminado correctamente"},
                 media_type="application/json",
                 status_code=status.HTTP_200_OK
             )
