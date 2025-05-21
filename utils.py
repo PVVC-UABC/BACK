@@ -6,12 +6,13 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from fastapi import HTTPException, status
+from typing import Optional
 
 ALGORITHM = "HS256"
 
 class TokenData(BaseModel):
-    idUsuario: int | None = None
-    correo: str | None = None
+    idUsuario: Optional[int] = None
+    correo: Optional[str] = None
 
 # Carga las variables de entorno desde el archivo .env
 load_dotenv()
