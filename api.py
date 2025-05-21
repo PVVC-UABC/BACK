@@ -1,11 +1,16 @@
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Response, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import pymysql.cursors
-import json
+from fastapi.security import OAuth2PasswordBearer
 import utils
 from hashlib import sha256
 from pydantic import BaseModel
+from datetime import timedelta
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+ACCESS_TOKEN_EXPIRE_DAYS = 10
 
 app = FastAPI()
 
@@ -26,6 +31,81 @@ class Usuario(BaseModel):
     Rol: str
     Correo: str
     Contrasena: str
+
+class login(BaseModel):
+    Correo: str
+    Contrasena: str
+
+@app.get("/login")
+async def root(response: Response, login: login):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            hashed_password = sha256(login.Contrasena.encode()).hexdigest()
+            cursor.execute("SELECT * FROM Usuario WHERE Correo = %s AND Contrasena = %s", (login.Correo, hashed_password))
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_401_UNAUTHORIZED
+                return {"message": "Usuario o contraseña incorrectos"}
+            access_token = utils.create_access_token(
+                data={"idUsuario": result[0][0], "correo": result[0][5]},
+                expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+            )
+            return {"access_token": access_token, "token_type": "bearer"}
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.get("/protectedAdmin")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = utils.verify_token(token)
+        if payload["rol"] != "Administrador":
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return {"message": "No tienes permiso para acceder a esta ruta"}
+        return JSONResponse(
+            content={"message": "Acceso permitido"},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+
+    
+@app.get("/protectedAlmacenista")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = utils.verify_token(token)
+        if payload["rol"] != "Almacenista" and payload["rol"] != "Administrador":
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return {"message": "No tienes permiso para acceder a esta ruta"}
+        return JSONResponse(
+            content={"message": "Acceso permitido"},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
+@app.get("/protectedEnfermero")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = utils.verify_token(token)
+        if payload["rol"] != "Enfermero" and payload["rol"] != "Administrador":
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return {"message": "No tienes permiso para acceder a esta ruta"}
+        return JSONResponse(
+            content={"message": "Acceso permitido"},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
 
 @app.get("/getMemoryUsage")
 async def root(response: Response):

@@ -2,6 +2,16 @@ import pymysql
 import os
 from dotenv import load_dotenv
 import psutil
+from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel
+from fastapi import HTTPException, status
+
+ALGORITHM = "HS256"
+
+class TokenData(BaseModel):
+    idUsuario: int | None = None
+    correo: str | None = None
 
 # Carga las variables de entorno desde el archivo .env
 load_dotenv()
@@ -12,6 +22,51 @@ __port=int(os.getenv('DB_PORT',3306))
 __user=os.getenv('DB_USER')
 __password=os.getenv('DB_PASSWORD')
 __db=os.getenv('DB_DB')
+__SECRET_KEY=os.getenv('SECRET_KEY')
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, __SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, __SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("idUsuario")
+        correo: str = payload.get("correo")
+        if user_id is None or correo is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # Consultar la base de datos para obtener el rol
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT Rol FROM Usuario WHERE idUsuario=%s AND Correo=%s",
+                    (user_id, correo)
+                )
+                result = cursor.fetchone()
+                if not result:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Usuario no encontrado",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                rol = result[0]
+        finally:
+            conn.close()
+        return {"idUsuario": user_id, "correo": correo, "rol": rol}
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 def get_connection():
     return pymysql.connect(
