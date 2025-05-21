@@ -6,7 +6,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from fastapi import HTTPException, status
-from typing import Optional
+from typing import Optional, Union
 
 ALGORITHM = "HS256"
 
@@ -25,7 +25,7 @@ __password=os.getenv('DB_PASSWORD')
 __db=os.getenv('DB_DB')
 __SECRET_KEY=os.getenv('SECRET_KEY')
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
