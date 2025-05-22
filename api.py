@@ -46,7 +46,7 @@ class UpdateGInstrumento(BaseModel):
     nuevaCantidad: int
 
 class Equipo(BaseModel):
-    idEquipo: int | None = None
+    idEquipo: optional[int] = None
     Nombre: str
 
 class EquipoInstrumento(BaseModel):
