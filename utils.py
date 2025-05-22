@@ -89,3 +89,11 @@ def get_memory_usage():
     process = psutil.Process(os.getpid())
     memory_info = process.memory_info()
     return memory_info.rss / (1024 * 1024)  # Convertir a MB
+
+def get_memory_usage():
+    """
+    Obtiene el uso de memoria del sistema en MB.
+    """
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    return memory_info.rss / (1024 * 1024)  # Convertir a MB

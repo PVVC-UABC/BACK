@@ -1,0 +1,160 @@
+{
+    "clientName": "Thunder Client",
+    "collectionName": "Pruebas",
+    "collectionId": "3c11b13d-0500-4f97-adfc-880f61755112",
+    "dateExported": "2025-04-21T04:20:31.638Z",
+    "version": "1.2",
+    "folders": [],
+    "requests": [
+        {
+            "_id": "6c62104f-2b59-494e-8022-f906e10fc39d",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getCharolas",
+            "url": "http://localhost:8000/getCharolas",
+            "method": "GET",
+            "sortNum": 10000,
+            "created": "2025-04-21T03:46:40.320Z",
+            "modified": "2025-04-21T03:47:07.485Z",
+            "headers": []
+        },
+        {
+            "_id": "95686b86-43c5-45b3-a92f-2153388b4c99",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getCharola/[index]",
+            "url": "http://localhost:8000/getCharola/1",
+            "method": "GET",
+            "sortNum": 20000,
+            "created": "2025-04-21T03:47:28.264Z",
+            "modified": "2025-04-21T03:47:38.701Z",
+            "headers": []
+        },
+        {
+            "_id": "7e0627c9-9c51-4d49-8f6b-486b473ae569",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "postUsuario",
+            "url": "http://localhost:8000/postUsuario",
+            "method": "POST",
+            "sortNum": 30000,
+            "created": "2025-04-21T03:47:50.795Z",
+            "modified": "2025-04-21T03:50:47.930Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"Nombre\": \"Prueba\",\n  \"Rol\": \"2\",\n  \"Correo\": \"prueba@prueba.com\",\n  \"Contraseña\": \"1234\"\n}",
+                "form": []
+            }
+        },
+        {
+            "_id": "857ead7e-f9a4-4b96-86d9-7615a5d63ab2",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "updateUsuarioNombre",
+            "url": "http://localhost:8000/updateUsuario/1/Nombre/Diosito",
+            "method": "PUT",
+            "sortNum": 40000,
+            "created": "2025-04-21T03:51:10.390Z",
+            "modified": "2025-04-21T03:51:49.738Z",
+            "headers": []
+        },
+        {
+            "_id": "66eb41e7-a05f-4998-a16e-b34a82236f63",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "updateUsuarioContra",
+            "url": "http://localhost:8000/updateUsuario/1/Contraseña/4321",
+            "method": "PUT",
+            "sortNum": 50000,
+            "created": "2025-04-21T03:52:08.040Z",
+            "modified": "2025-04-21T03:52:32.247Z",
+            "headers": []
+        },
+        {
+            "_id": "814567cf-82f5-4d97-bd0f-5c8bf7537904",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getUsuarios",
+            "url": "http://localhost:8000/getUsuarios",
+            "method": "GET",
+            "sortNum": 60000,
+            "created": "2025-04-21T03:53:25.040Z",
+            "modified": "2025-04-21T03:53:44.063Z",
+            "headers": []
+        },
+        {
+            "_id": "98ef11c0-cba6-41a0-a963-1e42c55b52fb",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getUsuario/[index]",
+            "url": "http://localhost:8000/getUsuario/2",
+            "method": "GET",
+            "sortNum": 70000,
+            "created": "2025-04-21T03:58:03.200Z",
+            "modified": "2025-04-21T03:58:21.196Z",
+            "headers": []
+        },
+        {
+            "_id": "9680df4c-f7aa-4e7b-bc03-f4343dc02f17",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "deleteUsuario",
+            "url": "http://localhost:8000/deleteUsuario/2",
+            "method": "DELETE",
+            "sortNum": 80000,
+            "created": "2025-04-21T03:58:51.231Z",
+            "modified": "2025-04-21T03:59:53.843Z",
+            "headers": []
+        },
+        {
+            "_id": "36a5c9ed-72e4-4200-a388-24f3e967eefc",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getEspecialidades",
+            "url": "http://localhost:8000/getEspecialidades",
+            "method": "GET",
+            "sortNum": 90000,
+            "created": "2025-04-21T04:00:03.542Z",
+            "modified": "2025-04-21T04:00:27.366Z",
+            "headers": []
+        },
+        {
+            "_id": "2d0df4d8-1873-44af-b863-aad8df6af38e",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "getEspecialidad/[index]",
+            "url": "http://localhost:8000/getEspecialidad/2",
+            "method": "GET",
+            "sortNum": 100000,
+            "created": "2025-04-21T04:01:07.535Z",
+            "modified": "2025-04-21T04:01:21.037Z",
+            "headers": []
+        },
+        {
+            "_id": "b643dc51-6528-46d7-9adc-a8466ca80e95",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "postEspecialidad/[nombre]",
+            "url": "http://localhost:8000/postEspecialidad/Cirugia2",
+            "method": "POST",
+            "sortNum": 110000,
+            "created": "2025-04-21T04:01:42.249Z",
+            "modified": "2025-04-21T04:01:58.925Z",
+            "headers": []
+        },
+        {
+            "_id": "97f15e64-e270-465d-9b5c-f0409449e98f",
+            "colId": "3c11b13d-0500-4f97-adfc-880f61755112",
+            "containerId": "",
+            "name": "deleteEspecialidad",
+            "url": "http://localhost:8000/deleteEspecialidad/4",
+            "method": "DELETE",
+            "sortNum": 120000,
+            "created": "2025-04-21T04:02:14.928Z",
+            "modified": "2025-04-21T04:02:42.150Z",
+            "headers": []
+        }
+    ],
+    "ref": "tMrLr0nuf2qCWSPewdmxBioh4belSPmAo86mwbyavnZvnzP0Z3E-vfs33IYLgFJ8vTVAP5e0GCPpnmw6kqub0Q"
+}

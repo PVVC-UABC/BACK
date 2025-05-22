@@ -1,18 +1,11 @@
-import os
-import io
-import pdfkit
-import pymysql
-from jinja2 import Environment, FileSystemLoader
-from fastapi import FastAPI, Response, status, HTTPException, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Response, status, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 import utils
 from hashlib import sha256
 from pydantic import BaseModel
-from datetime import datetime, timedelta
-from typing import Optional
-
+from datetime import timedelta
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -42,147 +35,6 @@ class Usuario(BaseModel):
 class login(BaseModel):
     Correo: str
     Contrasena: str
-
-class GInstrumento(BaseModel):
-    CodigoDeBarras: str
-    Cantidad: int
-    Nombre: str
-
-class UpdateGInstrumento(BaseModel):
-    idInstrumento: int
-    nuevaCantidad: int  
-
-class Equipo(BaseModel):
-    idEquipo: int | None = None  
-    Nombre: str
-
-class EquipoInstrumento(BaseModel):
-    idEquipo: int
-    herramientas: list[dict]
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
-
-# Configuración de pdfkit
-try:
-    PDF_CONFIG = pdfkit.configuration()
-except Exception as e:
-    raise RuntimeError(
-        "Requisito faltante: wkhtmltopdf no está instalado.\n"
-        "Instalar con: sudo apt install wkhtmltopdf"
-    ) from e
-
-def obtener_datos(id_instrumento: Optional[int] = None):
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            # Estado actual de todos los instrumentos y su ubicación
-            cursor.execute("""
-                SELECT idInstrumentoIndividual AS id, Estado, Ubicacion, ultimaEsterilizacion
-                FROM IInstrumento
-            """)
-            estado_instrumentos = cursor.fetchall()
-
-            # Historial de un instrumento específico (si se proporciona un ID)
-            historial_instrumento = []
-            if id_instrumento:
-                cursor.execute("""
-                    SELECT hi.Nombre, hi.CodigoDeBarras, hi.tipoCambio, hi.observaciones, hi.fechaCambio, 
-                           CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')) AS usuario
-                    FROM Historial_GInstrumento hi
-                    JOIN Usuario u ON hi.idUsuario = u.idUsuario
-                    WHERE hi.idInstrumento = %s
-                    ORDER BY hi.fechaCambio DESC
-                """, (id_instrumento,))
-                historial_instrumento = cursor.fetchall()
-
-            # Historial de todos los instrumentos
-            cursor.execute("""
-                SELECT hi.Nombre, hi.CodigoDeBarras, hi.tipoCambio, hi.observaciones, hi.fechaCambio, 
-                       CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')) AS usuario
-                FROM Historial_GInstrumento hi
-                JOIN Usuario u ON hi.idUsuario = u.idUsuario
-                ORDER BY hi.fechaCambio DESC
-            """)
-            historial_todos = cursor.fetchall()
-
-        return {
-            "estado_instrumentos": estado_instrumentos,
-            "historial_instrumento": historial_instrumento,
-            "historial_todos": historial_todos,
-            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        }
-    except pymysql.Error as e:
-        print(f"Error MySQL: {e}")
-        return None
-    finally:
-        connection.close()
-
-# Función para generar el PDF en memoria
-def generar_pdf(id_instrumento: Optional[int] = None):
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-    template = env.get_template("reporte.html")
-
-    datos = obtener_datos(id_instrumento)
-    if not datos:
-        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
-
-    pdf_options = {
-        "page-size": "A4",
-        "margin-top": "15mm",
-        "encoding": "UTF-8",
-        "footer-right": "[page]/[topage]",
-        "quiet": "",
-    }
-
-    pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
-
-    return io.BytesIO(pdf_bytes)
-
-# Endpoint para obtener el PDF con historial opcional de un instrumento específico
-@app.get("/getPdf")
-async def descargar_pdf(id_instrumento: Optional[int] = None):
-    pdf_file = generar_pdf(id_instrumento)
-    return StreamingResponse(pdf_file, media_type="application/pdf",
-                             headers={"Content-Disposition": "inline; filename=Reporte_Instrumentos.pdf"})
-
-
-
-
-def verificar_disponibilidad(id: int, fecha: str):
-    connection = utils.get_connection()
-    try:
-        with connection.cursor() as cursor:
-            fecha_base = datetime.strptime(fecha, "%Y-%m-%d %H:%M")
-            rango_inicio = fecha_base - timedelta(hours=6)
-            rango_fin = fecha_base + timedelta(hours=6)
-
-            # Verifica si el instrumento tuvo una esterilización en el rango de 6 horas
-            consulta = """
-                SELECT COUNT(*) AS existe FROM IInstrumento
-                WHERE idInstrumentoIndividual= %s
-                AND ultimaEsterilizacion BETWEEN %s AND %s
-            """
-            cursor.execute(consulta, (id, rango_inicio.strftime("%Y-%m-%d %H:%M"), rango_fin.strftime("%Y-%m-%d %H:%M")))
-            resultado = cursor.fetchone()
-
-            return resultado["existe"] == 0  # `True` si está disponible, `False` si hay traslape
-
-    except pymysql.Error as e:
-        print(f"Error en BD: {e}")
-        return None
-    finally:
-        connection.close()
-
-@app.get("/verificar-disponibilidad/{id}/{fecha}")
-async def verificar(id: int, fecha: str):
-    disponible = verificar_disponibilidad(id, fecha)
-
-    if disponible is None:
-        raise HTTPException(status_code=500, detail="Error en la consulta a la BD")
-
-    return {"id": id, "fecha": fecha, "disponible": disponible}
 
 @app.get("/login")
 async def root(response: Response, login: login):
@@ -268,6 +120,45 @@ async def root(response: Response):
         error = "Error: " + str(e)
         return error
 
+@app.get("/getEquipos")
+async def root(response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
+@app.get("/getEquipo/{index}")
+async def root(index : int, response: Response):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )   
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
 
 @app.post("/postUsuario")
 async def crear_usuario(usuario: Usuario, response: Response):
@@ -475,7 +366,6 @@ async def root(index : int, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-        
             cursor.execute("SELECT * FROM Especialidad WHERE idEspecialidad = %s", (index))
             result = cursor.fetchall()
             if not result:
