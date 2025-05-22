@@ -6,6 +6,7 @@ import utils
 from hashlib import sha256
 from pydantic import BaseModel
 from datetime import timedelta
+from typing import Optional, List, Dict
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -46,12 +47,12 @@ class UpdateGInstrumento(BaseModel):
     nuevaCantidad: int
 
 class Equipo(BaseModel):
-    idEquipo: optional[int] = None
+    idEquipo: Optional[int] = None
     Nombre: str
 
 class EquipoInstrumento(BaseModel):
     idEquipo: int
-    herramientas: list[dict]
+    herramientas: List[dict]
 
 @app.get("/login")
 async def root(response: Response, login: login):
