@@ -36,6 +36,23 @@ class login(BaseModel):
     Correo: str
     Contrasena: str
 
+class GInstrumento(BaseModel):
+    CodigoDeBarras: str
+    Cantidad: int
+    Nombre: str
+
+class UpdateGInstrumento(BaseModel):
+    idInstrumento: int
+    nuevaCantidad: int
+
+class Equipo(BaseModel):
+    idEquipo: int | None = None
+    Nombre: str
+
+class EquipoInstrumento(BaseModel):
+    idEquipo: int
+    herramientas: list[dict]
+
 @app.get("/login")
 async def root(response: Response, login: login):
     try:
