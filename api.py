@@ -386,3 +386,353 @@ async def root(index : int, response: Response):
         return error
     finally:
         connection.close()
+
+@app.post("/postGInstrumento")
+async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+
+            cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE CodigoDeBarras = %s", (grupo.CodigoDeBarras,))
+            existe = cursor.fetchone()
+            
+            if existe:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Error: El código de barras ya existe en la base de datos"}
+
+            cursor.execute("""
+                INSERT INTO GInstrumento (CodigoDeBarras, Cantidad, Nombre)
+                VALUES (%s, %s, %s)
+            """, (grupo.CodigoDeBarras, grupo.Cantidad, grupo.Nombre))
+            connection.commit()
+            
+            id_grupo = cursor.lastrowid
+
+            for _ in range(grupo.Cantidad):
+                cursor.execute("""
+                    INSERT INTO IInstrumento (idInstrumentoGrupo, Estado, Ubicacion, ultimaEsterilizacion)
+                    VALUES (%s, %s, %s, NOW())
+                """, (id_grupo, "Disponible", "Almacén"))
+            
+            connection.commit()
+            return {"message": "Grupo de instrumentos registrado y cantidad reflejada en IInstrumento"}
+    
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+    
+    finally:
+        connection.close()
+
+
+
+@app.put("/updateGInstrumento")
+async def actualizar_ginstrumento(update: UpdateGInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+
+            cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (update.idInstrumento,))
+            grupo = cursor.fetchone()
+            if not grupo:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Grupo de instrumentos no encontrado"}
+            
+            cantidad_actual = grupo[0]
+            diferencia = update.nuevaCantidad - cantidad_actual
+
+            if diferencia > 0: 
+                for _ in range(diferencia):
+                    cursor.execute("""
+                        INSERT INTO IInstrumento (idInstrumentoGrupo, Estado, Ubicacion, ultimaEsterilizacion)
+                        VALUES (%s, %s, %s, NOW())
+                    """, (update.idInstrumento, "Disponible", "Almacén"))
+            
+            elif diferencia < 0:  
+                cantidad_a_eliminar = abs(diferencia)
+                cursor.execute("""
+                    SELECT idInstrumentoIndividual FROM IInstrumento 
+                    WHERE idInstrumentoGrupo = %s AND Estado = 'Disponible' LIMIT %s
+                """, (update.idInstrumento, cantidad_a_eliminar))
+                
+                instrumentos_disponibles = cursor.fetchall()
+                if len(instrumentos_disponibles) < cantidad_a_eliminar:
+                    response.status_code = status.HTTP_400_BAD_REQUEST
+                    return {"message": "No hay suficientes instrumentos disponibles para eliminar"}
+                
+                for instrumento in instrumentos_disponibles:
+                    cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoIndividual = %s", (instrumento[0],))
+            
+            cursor.execute("UPDATE GInstrumento SET Cantidad = %s WHERE idInstrumento = %s", (update.nuevaCantidad, update.idInstrumento))
+            connection.commit()
+            return {"message": "Grupo de instrumentos actualizado correctamente"}
+    
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+    
+    finally:
+        connection.close()
+
+@app.post("/postEquipo")
+async def crear_equipo(equipo: Equipo, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            cursor.execute("INSERT INTO Equipo (Nombre) VALUES (%s)", (equipo.Nombre,))
+            connection.commit()
+            return {"message": "Equipo registrado correctamente"}
+    
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+    
+    finally:
+        connection.close()
+
+@app.put("/updateEquipo")
+async def actualizar_equipo(equipo: Equipo, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            idEquipo = equipo.idEquipo
+            nuevoNombre = equipo.Nombre
+
+            if not idEquipo or not nuevoNombre:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Faltan parámetros en el JSON"}
+
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+            existe = cursor.fetchone()
+            
+            if not existe:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Equipo no encontrado"}
+            
+            cursor.execute("UPDATE Equipo SET Nombre = %s WHERE idEquipo = %s", (nuevoNombre, idEquipo))
+            connection.commit()
+            return {"message": "Equipo actualizado correctamente"}
+    
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+    
+    finally:
+        connection.close()
+
+@app.delete("/deleteEquipo")
+async def eliminar_equipo(data: dict, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+
+            idEquipo = data.get("idEquipo")
+
+            if not idEquipo:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Falta el parámetro 'idEquipo' en el JSON"}
+
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+            existe = cursor.fetchone()
+
+            if not existe:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Equipo no encontrado"}
+
+            # ✅ Primero eliminar todas las herramientas asociadas en `Equipo_Instrumento`
+            cursor.execute("DELETE FROM Equipo_Instrumento WHERE idEquipo = %s", (idEquipo,))
+
+            # ✅ Ahora eliminar el equipo en `Equipo`
+            cursor.execute("DELETE FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+
+            connection.commit()
+            return {"message": "Equipo y sus herramientas asociadas eliminados correctamente"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+@app.post("/postEquipoInstrumento")
+async def agregar_herramientas_equipo(data: EquipoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+
+            idEquipo = data.idEquipo
+
+            cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+            equipo_existente = cursor.fetchone()
+            if not equipo_existente:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": f"Equipo con id {idEquipo} no encontrado"}
+
+            for herramienta in data.herramientas:
+                idInstrumento = herramienta["idInstrumento"]
+                cantidad = herramienta["cantidad"]
+
+                cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+                instrumento_existente = cursor.fetchone()
+                if not instrumento_existente:
+                    response.status_code = status.HTTP_404_NOT_FOUND
+                    return {"message": f"Instrumento con id {idInstrumento} no encontrado"}
+
+                cantidad_disponible = instrumento_existente[0]
+                cantidad_final = min(cantidad, cantidad_disponible)
+
+                cursor.execute("SELECT cantidad FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s", 
+                               (idEquipo, idInstrumento))
+                instrumento_equipo = cursor.fetchone()
+
+                if instrumento_equipo:
+                    nueva_cantidad = min(instrumento_equipo[0] + cantidad_final, cantidad_disponible)
+                    cursor.execute("""
+                        UPDATE Equipo_Instrumento SET cantidad = %s WHERE idEquipo = %s AND idInstrumento = %s
+                    """, (nueva_cantidad, idEquipo, idInstrumento))
+                else:
+                    cursor.execute("""
+                        INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
+                        VALUES (%s, %s, %s)
+                    """, (idEquipo, idInstrumento, cantidad_final))
+
+            connection.commit()
+            return {"message": "Herramientas agregadas correctamente al equipo"}
+
+    except pymysql.err.IntegrityError as e:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return {"error": f"Error de clave foránea: {str(e)}"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+@app.put("/updateEquipoInstrumento")
+async def actualizar_herramientas_equipo(data: EquipoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            idEquipo = data.idEquipo
+
+            cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+            equipo_existente = cursor.fetchone()
+            if not equipo_existente:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Equipo no encontrado"}
+
+            for herramienta in data.herramientas:
+                idInstrumento = herramienta["idInstrumento"]
+                cantidad = herramienta["cantidad"]
+
+                cursor.execute("SELECT cantidad FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s",
+                               (idEquipo, idInstrumento))
+                instrumento_equipo = cursor.fetchone()
+                if not instrumento_equipo:
+                    response.status_code = status.HTTP_404_NOT_FOUND
+                    return {"message": f"Instrumento con id {idInstrumento} no está en el equipo"}
+
+                cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+                instrumento_existente = cursor.fetchone()
+                cantidad_disponible = instrumento_existente[0]
+
+                cantidad_final = min(cantidad, cantidad_disponible)
+
+                cursor.execute("""
+                    UPDATE Equipo_Instrumento SET cantidad = %s WHERE idEquipo = %s AND idInstrumento = %s
+                """, (cantidad_final, idEquipo, idInstrumento))
+
+            connection.commit()
+            return {"message": "Cantidad de herramientas modificada correctamente"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+
+@app.delete("/deleteEquipoInstrumento")
+async def eliminar_herramientas_equipo(data: EquipoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            payload = utils.verify_token(token)
+            if payload["rol"] != "Administrador":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "No tienes permiso para acceder a esta ruta"}
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+
+            idEquipo = data.idEquipo
+
+            cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (idEquipo,))
+            equipo_existente = cursor.fetchone()
+            if not equipo_existente:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Equipo no encontrado"}
+
+            for herramienta in data.herramientas:
+                idInstrumento = herramienta["idInstrumento"]
+
+                cursor.execute("SELECT cantidad FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s",
+                               (idEquipo, idInstrumento))
+                instrumento_equipo = cursor.fetchone()
+                if not instrumento_equipo:
+                    response.status_code = status.HTTP_404_NOT_FOUND
+                    return {"message": f"Instrumento con id {idInstrumento} no está en el equipo"}
+
+                cursor.execute("""
+                    DELETE FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s
+                """, (idEquipo, idInstrumento))
+
+            connection.commit()
+            return {"message": "Herramientas eliminadas del equipo correctamente"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+

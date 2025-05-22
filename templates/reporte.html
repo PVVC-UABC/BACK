@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Instrumentos</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>Historial de Instrumentos</h1>
+    <p>Generado el: {{ fecha_reporte }}</p>
+
+    <h2>Estado Actual de Todos los Instrumentos</h2>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Estado</th>
+            <th>Ubicación</th>
+        </tr>
+        {% for instrumento in instrumentos %}
+        <tr>
+            <td>{{ instrumento.id }}</td>
+            <td>{{ instrumento.nombre }}</td>
+            <td>{{ instrumento.estado }}</td>
+            <td>{{ instrumento.ubicacion }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Historial de Instrumentos</h2>
+    <table>
+        <tr>
+            <th>ID Instrumento</th>
+            <th>Estado Anterior</th>
+            <th>Estado Actual</th>
+            <th>Fecha</th>
+            <th>Usuario</th>
+        </tr>
+        {% for historial in historial_instrumentos %}
+        <tr>
+            <td>{{ historial.id_instrumento }}</td>
+            <td>{{ historial.estado_anterior }}</td>
+            <td>{{ historial.estado_actual }}</td>
+            <td>{{ historial.fecha }}</td>
+            <td>{{ historial.usuario }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
