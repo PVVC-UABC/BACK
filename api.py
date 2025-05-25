@@ -20,7 +20,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
-origins = ["187.190.242.*"]
+origins = ["https://hospitalinfantil.org.mx"]
 
 app.add_middleware(
     CORSMiddleware,
