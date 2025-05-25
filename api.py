@@ -20,7 +20,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
-origins = ["*"]
+origins = ["187.190.242.*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -402,21 +402,21 @@ async def root(response: Response, login: login):
     finally:
         connection.close()
         
-@app.get("/fetchRol")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+@app.get("/me")
+async def root(response: Response):
     try:
-        payload = utils.verify_token(token)
-        if not payload:
-            response.status_code = status.HTTP_401_UNAUTHORIZED
-            return {"message": "Token inválido"}
-        return JSONResponse(
-            content={"rol": payload["rol"]},
-            media_type="application/json",
-            status_code=status.HTTP_200_OK
-        )
+        token = response.get_cookie("access_token", path="/")
+        if not token:
+            return JSONResponse(
+                content={"message": "Token no encontrado"},
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+        payload = 
     except Exception as e:
-        error = "Error: " + str(e)
-        return error
+        return JSONResponse(
+            content={"message": "Token no encontrado", "detail": str(e)},
+            status_code=status.HTTP_401_UNAUTHORIZED
+        )
 
 @app.get("/protectedAdmin")
 async def root(response: Response, token: str = Depends(oauth2_scheme)):
