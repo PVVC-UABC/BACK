@@ -32,9 +32,6 @@ app.add_middleware(
 )
 
 class Usuario(BaseModel):
-    Nombres: str
-    ApellidoPaterno: str
-    ApellidoMaterno: str
     Rol: str
     Correo: str
     Contrasena: str
@@ -508,11 +505,11 @@ async def crear_usuario(usuario: Usuario, response: Response):
         
 @app.put("/updateUsuario/{index}")
 async def root(index: int, response: Response, usuario: Usuario, token: str = Depends(oauth2_scheme)):
+    payload = utils.verify_token(token)
+    if payload["rol"] != "Administrador":
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return {"message": "No tienes permiso para acceder a esta ruta"}
     try:
-        payload = utils.verify_token(token)
-        if payload["rol"] != "Administrador":
-            response.status_code = status.HTTP_403_FORBIDDEN
-            return {"message": "No tienes permiso para acceder a esta ruta"}
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             contrasena = 0
