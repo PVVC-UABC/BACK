@@ -1,6 +1,6 @@
 import os
 import io
-import pdfkit
+# import pdfkit
 import pymysql
 import utils
 from jinja2 import Environment, FileSystemLoader
@@ -181,13 +181,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
 
 # Configuración de pdfkit
-try:
-    PDF_CONFIG = pdfkit.configuration()
-except Exception as e:
-    raise RuntimeError(
-        "Requisito faltante: wkhtmltopdf no está instalado.\n"
-        "Instalar con: sudo apt install wkhtmltopdf"
-    ) from e
+# try:
+#     PDF_CONFIG = pdfkit.configuration()
+# except Exception as e:
+#     raise RuntimeError(
+#         "Requisito faltante: wkhtmltopdf no está instalado.\n"
+#         "Instalar con: sudo apt install wkhtmltopdf"
+#     ) from e
 
 
 def obtener_datos_historial_ginstrumento():
@@ -215,31 +215,31 @@ def obtener_datos_historial_ginstrumento():
     finally:
         connection.close()
 
-def generar_pdf_historial_ginstrumento():
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-    template = env.get_template("historial_ginstrumentos.html")
+# def generar_pdf_historial_ginstrumento():
+#     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+#     template = env.get_template("historial_ginstrumentos.html")
 
-    datos = obtener_datos_historial_ginstrumento()
-    if not datos:
-        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+#     datos = obtener_datos_historial_ginstrumento()
+#     if not datos:
+#         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
-    pdf_options = {
-        "page-size": "A4",
-        "margin-top": "15mm",
-        "encoding": "UTF-8",
-        "footer-right": "[page]/[topage]",
-        "quiet": "",
-    }
+#     pdf_options = {
+#         "page-size": "A4",
+#         "margin-top": "15mm",
+#         "encoding": "UTF-8",
+#         "footer-right": "[page]/[topage]",
+#         "quiet": "",
+#     }
 
-    pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
+#     pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
 
-    return io.BytesIO(pdf_bytes)
+#     return io.BytesIO(pdf_bytes)
 
-@app.get("/getPdfHistorialGInstrumentos")
-async def descargar_pdf_historial():
-    pdf_file = generar_pdf_historial_ginstrumento()
-    return StreamingResponse(pdf_file, media_type="application/pdf",
-                             headers={"Content-Disposition": "inline; filename=Historial_GInstrumentos.pdf"})
+# @app.get("/getPdfHistorialGInstrumentos")
+# async def descargar_pdf_historial():
+#     pdf_file = generar_pdf_historial_ginstrumento()
+#     return StreamingResponse(pdf_file, media_type="application/pdf",
+#                              headers={"Content-Disposition": "inline; filename=Historial_GInstrumentos.pdf"})
 
 
 
@@ -288,31 +288,31 @@ def obtener_datos_historial_paquetes():
     finally:
         connection.close()
 
-def generar_pdf_historial_paquetes():
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-    template = env.get_template("historial_paquetes.html")
+# def generar_pdf_historial_paquetes():
+#     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+#     template = env.get_template("historial_paquetes.html")
 
-    datos = obtener_datos_historial_paquetes()
-    if not datos:
-        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+#     datos = obtener_datos_historial_paquetes()
+#     if not datos:
+#         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
-    pdf_options = {
-        "page-size": "A4",
-        "margin-top": "15mm",
-        "encoding": "UTF-8",
-        "footer-right": "[page]/[topage]",
-        "quiet": "",
-    }
+#     pdf_options = {
+#         "page-size": "A4",
+#         "margin-top": "15mm",
+#         "encoding": "UTF-8",
+#         "footer-right": "[page]/[topage]",
+#         "quiet": "",
+#     }
 
-    pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
+#     pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
 
-    return io.BytesIO(pdf_bytes)
+#     return io.BytesIO(pdf_bytes)
 
-@app.get("/getPdfHistorialPaquetes")
-async def descargar_pdf_historial():
-    pdf_file = generar_pdf_historial_paquetes()
-    return StreamingResponse(pdf_file, media_type="application/pdf",
-                             headers={"Content-Disposition": "inline; filename=Historial_Paquetes.pdf"})
+# @app.get("/getPdfHistorialPaquetes")
+# async def descargar_pdf_historial():
+#     pdf_file = generar_pdf_historial_paquetes()
+#     return StreamingResponse(pdf_file, media_type="application/pdf",
+#                              headers={"Content-Disposition": "inline; filename=Historial_Paquetes.pdf"})
 
 
 
