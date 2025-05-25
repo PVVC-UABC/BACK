@@ -10,14 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from hashlib import sha256
 from pydantic import BaseModel
-from datetime import datetime, timedelta, date, time, timedelta
+from datetime import datetime, timedelta, date, time, timedelta, timezone
 from typing import Optional, Union, List, Dict
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-ACCESS_TOKEN_EXPIRE_DAYS = 10
 
 app = FastAPI()
 
@@ -353,7 +352,7 @@ async def verificar(id: int, fecha: str):
 @app.post("/logut")
 async def root(response: Response):
     try:
-        response.delete_cookie("access_token")
+        response.delete_cookie("access_token",path="/")
         return {"message": "Logout exitoso"}
     except:
         response.status_code = status.HTTP_401_UNAUTHORIZED
@@ -370,16 +369,38 @@ async def root(response: Response, login: login):
             if not result:
                 response.status_code = status.HTTP_401_UNAUTHORIZED
                 return {"message": "Usuario o contraseña incorrectos"}
-            access_token = utils.create_access_token(
-                data={"idUsuario": result[0][0], "correo": result[0][5]},
-                expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+            token = utils.create_access_token(data={"idUsuario": result[0][0], "correo": result[0][4], "rol": result[0][5]})
+            response.set_cookie(
+                key="access_token", 
+                value=token,
+                httponly=True,
+                secure=True,
+                samesite="strict",
+                max_age=timedelta(days=10).total_seconds(),
+                path="/"
             )
-            return {"access_token": access_token, "token_type": "bearer"}
+            return JSONResponse(content={"Message":"Login exitoso!"},status_code=status.HTTP_200_OK, media_type="application/json")
     except Exception as e:
         error = "Error: " + str(e)
         return error
     finally:
         connection.close()
+        
+@app.get("/fetchRol")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = utils.verify_token(token)
+        if not payload:
+            response.status_code = status.HTTP_401_UNAUTHORIZED
+            return {"message": "Token inválido"}
+        return JSONResponse(
+            content={"rol": payload["rol"]},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
 
 @app.get("/protectedAdmin")
 async def root(response: Response, token: str = Depends(oauth2_scheme)):

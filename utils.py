@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from typing import Optional, Union
 
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = 10
 
 class TokenData(BaseModel):
     idUsuario: Optional[int] = None
@@ -25,12 +26,15 @@ __password=os.getenv('DB_PASSWORD')
 __db=os.getenv('DB_DB')
 __SECRET_KEY=os.getenv('SECRET_KEY')
 
-def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, __SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+def create_access_token(data: dict):
+    payload = {
+        "idUsuario": data.get("idUsuario"),
+        "correo": data.get("correo"),
+        "rol": data.get("rol"),
+        "exp": datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    }
+    token = jwt.enconde(payload, __SECRET_KEY, algorithm=ALGORITHM)
+    return token
 
 def verify_token(token: str):
     try:
