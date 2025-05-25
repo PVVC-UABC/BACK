@@ -507,18 +507,27 @@ async def crear_usuario(usuario: Usuario, response: Response):
         connection.close()
         
 @app.put("/updateUsuario/{index}")
-async def root(index: int, response: Response, usuario: Usuario):
+async def root(index: int, response: Response, usuario: Usuario, token: str = Depends(oauth2_scheme)):
     try:
+        payload = utils.verify_token(token)
+        if payload["rol"] != "Administrador":
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return {"message": "No tienes permiso para acceder a esta ruta"}
         connection = utils.get_connection()
         with connection.cursor() as cursor:
+            contrasena = 0
             cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
             result = cursor.fetchall()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "No existe el usuario"}
+            if usuario.Contrasena == "":
+                contrasena = result[0][6]
+            else:
+                contrasena = sha256(usuario.Contrasena.encode()).hexdigest()
             cursor.execute(
                 "UPDATE Usuario SET Nombres = %s, ApellidoPaterno = %s, ApellidoMaterno = %s, Rol = %s, Correo = %s, Contrasena = %s WHERE idUsuario = %s",
-                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, sha256(usuario.Contrasena.encode()).hexdigest(), index)
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, contrasena, index)
             )
             connection.commit()
             return JSONResponse(
