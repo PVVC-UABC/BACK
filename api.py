@@ -349,7 +349,7 @@ async def verificar(id: int, fecha: str):
 
     return {"id": id, "fecha": fecha, "disponible": disponible}
 
-@app.post("/logut")
+@app.post("/logout")
 async def root(response: Response):
     try:
         response.delete_cookie("access_token",path="/")
@@ -357,6 +357,7 @@ async def root(response: Response):
     except:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return {"message": "Token inválido"}
+    
 @app.post("/login")
 async def root(response: Response, login: login):
     try:
