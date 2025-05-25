@@ -357,7 +357,6 @@ async def root(response: Response):
     except:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return {"message": "Token inválido"}
-
 @app.post("/login")
 async def root(response: Response, login: login):
     try:
@@ -366,23 +365,39 @@ async def root(response: Response, login: login):
             hashed_password = sha256(login.Contrasena.encode()).hexdigest()
             cursor.execute("SELECT * FROM Usuario WHERE Correo = %s AND Contrasena = %s", (login.Correo, hashed_password))
             result = cursor.fetchall()
+            
             if not result:
-                response.status_code = status.HTTP_401_UNAUTHORIZED
-                return {"message": "Usuario o contraseña incorrectos"}
-            token = utils.create_access_token(data={"idUsuario": result[0][0], "correo": result[0][4], "rol": result[0][5]})
+                return JSONResponse(
+                    content={"message": "Usuario o contraseña incorrectos"},
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            token = utils.create_access_token(data={
+                "idUsuario": result[0][0],
+                "correo": result[0][4],
+                "rol": result[0][5]
+            })
+
+            response = JSONResponse(
+                content={"message": "Login exitoso"},
+                status_code=status.HTTP_200_OK
+            )
             response.set_cookie(
-                key="access_token", 
+                key="access_token",
                 value=token,
                 httponly=True,
-                secure=False,
+                secure=False,  # Solo en desarrollo
                 samesite="lax",
-                max_age=timedelta(days=10).total_seconds(),
+                max_age=int(timedelta(days=10).total_seconds()),
                 path="/"
             )
             return response
+
     except Exception as e:
-        error = "Error: " + str(e)
-        return error
+        return JSONResponse(
+            content={"message": "Error interno", "detail": str(e)},
+            status_code=500
+        )
     finally:
         connection.close()
         
