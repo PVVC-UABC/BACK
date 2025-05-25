@@ -33,7 +33,7 @@ def create_access_token(data: dict):
         "rol": data.get("rol"),
         "exp": datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     }
-    token = jwt.enconde(payload, __SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode(payload, __SECRET_KEY, algorithm=ALGORITHM)
     return token
 
 def verify_token(token: str):
