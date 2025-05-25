@@ -402,21 +402,21 @@ async def root(response: Response, login: login):
     finally:
         connection.close()
         
-@app.get("/me")
-async def root(response: Response):
+@app.get("/fetchRol")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
     try:
-        token = response.get_cookie("access_token", path="/")
-        if not token:
-            return JSONResponse(
-                content={"message": "Token no encontrado"},
-                status_code=status.HTTP_401_UNAUTHORIZED
-            )
-        payload = 
-    except Exception as e:
+        payload = utils.verify_token(token)
+        if not payload:
+            response.status_code = status.HTTP_401_UNAUTHORIZED
+            return {"message": "Token inválido"}
         return JSONResponse(
-            content={"message": "Token no encontrado", "detail": str(e)},
-            status_code=status.HTTP_401_UNAUTHORIZED
+            content={"rol": payload["rol"]},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
         )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
 
 @app.get("/protectedAdmin")
 async def root(response: Response, token: str = Depends(oauth2_scheme)):
