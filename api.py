@@ -78,11 +78,11 @@ class GetEquipoRequest(BaseModel):
 
 class UpdateEquipoInstrumentoRequest(BaseModel):
     idEquipo: int
-    herramientas: list[Dict] 
+    herramientas: List[Dict] 
 
 class DeleteEquipoInstrumentoRequest(BaseModel):
     idEquipo: int
-    herramientas: list[Dict] 
+    herramientas: List[Dict] 
 
 class Paquete(BaseModel):
     idPaquete: Union[int, None] = None
@@ -92,7 +92,7 @@ class Paquete(BaseModel):
 class PostPaqueteRequest(BaseModel):
     Nombre: str
     idEspecialidad: int
-    equipos: list[Dict] 
+    equipos: List[Dict] 
 
 class GetPaquetePorEspecialidadRequest(BaseModel):
     idEspecialidad: Union[int, None] = None
@@ -100,11 +100,11 @@ class GetPaquetePorEspecialidadRequest(BaseModel):
 
 class PaqueteInstrumento(BaseModel):
     idPaquete: int
-    instrumentos: list[Dict] 
+    instrumentos: List[Dict] 
 
 class PaqueteEquipo(BaseModel):
     idPaquete: int
-    equipos: list[int] 
+    equipos: List[int] 
 
 class Pedido(BaseModel):
     idPedido: Union[int, None] = None
@@ -130,7 +130,7 @@ class UpdatePedidoRequest(BaseModel):
 
 class PedidoEquipo(BaseModel):
     idPedido: int
-    equipos: list[int]  
+    equipos: List[int]  
 
 class Instrumento(BaseModel):
     idInstrumento: Union[int, None] = None  
@@ -143,7 +143,7 @@ class PedidoInstrumento(BaseModel):
 
 class DeletePedidoEquipoRequest(BaseModel):
     idPedido: int
-    equipos: list[int]  
+    equipos: List[int]  
 
 class GetPedidoRequest(BaseModel):
     idPedido: int
@@ -165,7 +165,7 @@ class DeletePedidoRequest(BaseModel):
 
 class DeletePaqueteEquipoRequest(BaseModel):
     idPaquete: int
-    equipos: list[Dict] 
+    equipos: List[Dict] 
 
 class DeletePaqueteRequest(BaseModel):
     idPaquete: Union[int, None] = None
