@@ -3,9 +3,10 @@ import io
 # import pdfkit
 import pymysql
 import utils
+from fpdf import FPDF
 from jinja2 import Environment, FileSystemLoader
-from fastapi import FastAPI, Response, status, HTTPException, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Response, status, HTTPException, Depends, Request
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from hashlib import sha256
@@ -180,74 +181,13 @@ class GetPaqueteRequest(BaseModel):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
 
-# Configuración de pdfkit
-# try:
-#     PDF_CONFIG = pdfkit.configuration()
-# except Exception as e:
-#     raise RuntimeError(
-#         "Requisito faltante: wkhtmltopdf no está instalado.\n"
-#         "Instalar con: sudo apt install wkhtmltopdf"
-#     ) from e
-
-
-def obtener_datos_historial_ginstrumento():
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT hi.idHistorial, gi.Nombre AS nombreInstrumento, hi.tipoCambio, 
-                       hi.observaciones, hi.fechaCambio, 
-                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
-                FROM Historial_GInstrumento hi
-                LEFT JOIN GInstrumento gi ON hi.idInstrumento = gi.idInstrumento
-                LEFT JOIN Usuario u ON hi.idUsuario = u.idUsuario
-                ORDER BY hi.fechaCambio DESC;
-            """)
-            historial_instrumentos = cursor.fetchall()
-
-        return {
-            "historial_instrumentos": historial_instrumentos,
-            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        }
-    except pymysql.Error as e:
-        print(f"Error MySQL: {e}")
-        return None
-    finally:
-        connection.close()
-
-# def generar_pdf_historial_ginstrumento():
-#     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-#     template = env.get_template("historial_ginstrumentos.html")
-
-#     datos = obtener_datos_historial_ginstrumento()
-#     if not datos:
-#         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
-
-#     pdf_options = {
-#         "page-size": "A4",
-#         "margin-top": "15mm",
-#         "encoding": "UTF-8",
-#         "footer-right": "[page]/[topage]",
-#         "quiet": "",
-#     }
-
-#     pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
-
-#     return io.BytesIO(pdf_bytes)
-
-# @app.get("/getPdfHistorialGInstrumentos")
-# async def descargar_pdf_historial():
-#     pdf_file = generar_pdf_historial_ginstrumento()
-#     return StreamingResponse(pdf_file, media_type="application/pdf",
-#                              headers={"Content-Disposition": "inline; filename=Historial_GInstrumentos.pdf"})
-
 
 
 def obtener_datos_historial_paquetes():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-
+            # ✅ Obtener el historial con nombres de paquetes y usuarios
             cursor.execute("""
                 SELECT hp.idHistorialPaquete, p.Nombre AS nombrePaquete, hp.tipoOperacion, 
                        hp.campo, hp.valorAnterior, hp.valorNuevo, hp.observaciones, hp.fechaCambio, 
@@ -259,6 +199,7 @@ def obtener_datos_historial_paquetes():
             """)
             historial_paquetes = cursor.fetchall()
 
+            # ✅ Obtener los nombres de los equipos directamente desde la tabla `Equipo`
             cursor.execute("""
                 SELECT e.idEquipo, e.Nombre AS nombreEquipo
                 FROM Equipo e;
@@ -288,67 +229,203 @@ def obtener_datos_historial_paquetes():
     finally:
         connection.close()
 
-# def generar_pdf_historial_paquetes():
-#     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-#     template = env.get_template("historial_paquetes.html")
+def generar_pdf_historial_paquetes():
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("historial_paquetes.html")
 
-#     datos = obtener_datos_historial_paquetes()
-#     if not datos:
-#         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+    datos = obtener_datos_historial_paquetes()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
-#     pdf_options = {
-#         "page-size": "A4",
-#         "margin-top": "15mm",
-#         "encoding": "UTF-8",
-#         "footer-right": "[page]/[topage]",
-#         "quiet": "",
-#     }
+    pdf_options = {
+        "page-size": "A4",
+        "margin-top": "15mm",
+        "encoding": "UTF-8",
+        "footer-right": "[page]/[topage]",
+        "quiet": "",
+    }
 
-#     pdf_bytes = pdfkit.from_string(template.render(datos), False, configuration=PDF_CONFIG, options=pdf_options)
+    html_renderizado = template.render(datos)
 
-#     return io.BytesIO(pdf_bytes)
+    return io.BytesIO(html_renderizado.encode("utf-8"))
 
-# @app.get("/getPdfHistorialPaquetes")
-# async def descargar_pdf_historial():
-#     pdf_file = generar_pdf_historial_paquetes()
-#     return StreamingResponse(pdf_file, media_type="application/pdf",
-#                              headers={"Content-Disposition": "inline; filename=Historial_Paquetes.pdf"})
-
-
-
-def verificar_disponibilidad(id: int, fecha: str):
-    connection = utils.get_connection()
+def obtener_datos_historial_pedido():
     try:
+        connection = utils.get_connection()
         with connection.cursor() as cursor:
-            fecha_base = datetime.strptime(fecha, "%Y-%m-%d %H:%M")
-            rango_inicio = fecha_base - timedelta(hours=6)
-            rango_fin = fecha_base + timedelta(hours=6)
+            cursor.execute("""
+                SELECT hp.idHistorialPedido, hp.idPedido, hp.estadoAnterior, hp.estadoNuevo, 
+                       hp.fechaCambio, 
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                FROM Historial_Pedido hp
+                LEFT JOIN Usuario u ON hp.idUsuario = u.idUsuario
+                ORDER BY hp.idHistorialPedido ASC; 
+            """)
+            historial_pedido = cursor.fetchall()
 
-            # Verifica si el instrumento tuvo una esterilización en el rango de 6 horas
-            consulta = """
-                SELECT COUNT(*) AS existe FROM IInstrumento
-                WHERE idInstrumentoIndividual= %s
-                AND ultimaEsterilizacion BETWEEN %s AND %s
-            """
-            cursor.execute(consulta, (id, rango_inicio.strftime("%Y-%m-%d %H:%M"), rango_fin.strftime("%Y-%m-%d %H:%M")))
-            resultado = cursor.fetchone()
-
-            return resultado["existe"] == 0  # `True` si está disponible, `False` si hay traslape
-
+        return {
+            "historial_pedido": historial_pedido,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
     except pymysql.Error as e:
-        print(f"Error en BD: {e}")
+        print(f"Error MySQL: {e}")
         return None
     finally:
         connection.close()
 
-@app.get("/verificar-disponibilidad/{id}/{fecha}")
-async def verificar(id: int, fecha: str):
-    disponible = verificar_disponibilidad(id, fecha)
+def generar_html_historial_pedido():
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("historial_pedido.html")
 
-    if disponible is None:
-        raise HTTPException(status_code=500, detail="Error en la consulta a la BD")
+    datos = obtener_datos_historial_pedido()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
-    return {"id": id, "fecha": fecha, "disponible": disponible}
+    return template.render(datos)
+
+def obtener_datos_historial_equipos():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT he.idHistorialEquipo, e.Nombre AS nombreEquipo, gi.Nombre AS nombreInstrumento, 
+                       he.tipoOperacion, he.campo, he.valorAnterior, he.valorNuevo, 
+                       he.observaciones, he.fechaCambio, 
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                FROM Historial_Equipos he
+                LEFT JOIN Equipo e ON he.idEquipo = e.idEquipo
+                LEFT JOIN GInstrumento gi ON he.idInstrumento = gi.idInstrumento
+                LEFT JOIN Usuario u ON he.idUsuario = u.idUsuario
+                ORDER BY he.idHistorialEquipo ASC; 
+            """)
+            historial_equipos = cursor.fetchall()
+
+        return {
+            "historial_equipos": historial_equipos,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_pdf_historial_equipos():
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("historial_equipos.html")
+
+    datos = obtener_datos_historial_equipos()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+def obtener_datos_historial_ginstrumento():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            # ✅ Obtener historial con nombres de instrumentos y usuarios
+            cursor.execute("""
+                SELECT hg.idHistorial, gi.Nombre AS nombreInstrumento, 
+                       hg.observaciones, hg.fechaCambio, 
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                FROM Historial_GInstrumento hg
+                LEFT JOIN GInstrumento gi ON hg.idInstrumento = gi.idInstrumento
+                LEFT JOIN Usuario u ON hg.idUsuario = u.idUsuario
+                ORDER BY hg.idHistorial ASC; 
+            """)
+            historial_ginstrumento = cursor.fetchall()
+
+        return {
+            "historial_ginstrumento": historial_ginstrumento,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_pdf_historial_ginstrumento():
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("historial_ginstrumento.html")
+
+    datos = obtener_datos_historial_ginstrumento()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+def obtener_datos_historial_iinstrumento():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT hi.idHistorialIndividual, gi.Nombre AS nombreHerramienta, 
+                       hi.observaciones, hi.fechaCambio, 
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                FROM Historial_IInstrumento hi
+                LEFT JOIN IInstrumento ii ON hi.idInstrumentoIndividual = ii.idInstrumentoIndividual
+                LEFT JOIN GInstrumento gi ON ii.idInstrumentoGrupo = gi.idInstrumento
+                LEFT JOIN Usuario u ON hi.idUsuario = u.idUsuario
+                ORDER BY hi.idHistorialIndividual ASC; 
+            """)
+            historial_iinstrumento = cursor.fetchall()
+
+        return {
+            "historial_iinstrumento": historial_iinstrumento,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_pdf_historial_iinstrumento():
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("historial_iinstrumento.html")
+
+    datos = obtener_datos_historial_iinstrumento()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+@app.get("/getHistorialIInstrumento")
+async def descargar_historial_iinstrumento():
+    pdf_file = generar_pdf_historial_iinstrumento()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Historial_IInstrumento.html"})
+
+@app.get("/getHistorialGInstrumento")
+async def descargar_historial_ginstrumento():
+    pdf_file = generar_pdf_historial_ginstrumento()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Historial_GInstrumento.html"})
+
+@app.get("/getHistorialEquipos")
+async def descargar_historial_equipos():
+    pdf_file = generar_pdf_historial_equipos()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Historial_Equipos.html"})
+
+@app.get("/getHistorialPedido")
+async def descargar_historial_pedido():
+    html_content = generar_html_historial_pedido()
+    return HTMLResponse(content=html_content)
+
+@app.get("/getHistorialPaquetes")
+async def descargar_historial_paquetes():
+    pdf_file = generar_pdf_historial_paquetes()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Historial_Paquetes.html"})
 
 @app.post("/logut")
 async def root(response: Response):
