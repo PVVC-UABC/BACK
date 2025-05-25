@@ -374,8 +374,8 @@ async def root(response: Response, login: login):
                 key="access_token", 
                 value=token,
                 httponly=True,
-                secure=True,
-                samesite="strict",
+                secure=False,
+                samesite="lax",
                 max_age=timedelta(days=10).total_seconds(),
                 path="/"
             )
