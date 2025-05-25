@@ -379,7 +379,7 @@ async def root(response: Response, login: login):
                 max_age=timedelta(days=10).total_seconds(),
                 path="/"
             )
-            return JSONResponse(content={"Message":"Login exitoso!"},status_code=status.HTTP_200_OK, media_type="application/json")
+            return response
     except Exception as e:
         error = "Error: " + str(e)
         return error
