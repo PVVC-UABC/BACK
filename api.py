@@ -434,6 +434,45 @@ async def root(response: Response):
         error = "Error: " + str(e)
         return error
 
+@app.get("/getEquipos")
+async def root(response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
+@app.get("/getEquipo/{index}")
+async def root(index : int, response: Response):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )   
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
 
 @app.post("/postUsuario")
 async def crear_usuario(usuario: Usuario, response: Response):
@@ -641,7 +680,6 @@ async def root(index : int, response: Response):
         connection = utils.get_connection()
 
         with connection.cursor() as cursor:
-        
             cursor.execute("SELECT * FROM Especialidad WHERE idEspecialidad = %s", (index))
             result = cursor.fetchall()
             if not result:
