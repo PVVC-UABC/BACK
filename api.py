@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from hashlib import sha256
 from pydantic import BaseModel
 from datetime import datetime, timedelta, date, time, timedelta
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -78,11 +78,11 @@ class GetEquipoRequest(BaseModel):
 
 class UpdateEquipoInstrumentoRequest(BaseModel):
     idEquipo: int
-    herramientas: list[dict] 
+    herramientas: list[Dict] 
 
 class DeleteEquipoInstrumentoRequest(BaseModel):
     idEquipo: int
-    herramientas: list[dict] 
+    herramientas: list[Dict] 
 
 class Paquete(BaseModel):
     idPaquete: Union[int, None] = None
@@ -92,7 +92,7 @@ class Paquete(BaseModel):
 class PostPaqueteRequest(BaseModel):
     Nombre: str
     idEspecialidad: int
-    equipos: list[dict] 
+    equipos: list[Dict] 
 
 class GetPaquetePorEspecialidadRequest(BaseModel):
     idEspecialidad: Union[int, None] = None
@@ -100,7 +100,7 @@ class GetPaquetePorEspecialidadRequest(BaseModel):
 
 class PaqueteInstrumento(BaseModel):
     idPaquete: int
-    instrumentos: list[dict] 
+    instrumentos: list[Dict] 
 
 class PaqueteEquipo(BaseModel):
     idPaquete: int
@@ -165,7 +165,7 @@ class DeletePedidoRequest(BaseModel):
 
 class DeletePaqueteEquipoRequest(BaseModel):
     idPaquete: int
-    equipos: list[dict] 
+    equipos: list[Dict] 
 
 class DeletePaqueteRequest(BaseModel):
     idPaquete: Union[int, None] = None
