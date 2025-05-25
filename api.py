@@ -32,6 +32,9 @@ app.add_middleware(
 )
 
 class Usuario(BaseModel):
+    Nombres: str
+    ApellidoPaterno: str
+    ApellidoMaterno: str
     Rol: str
     Correo: str
     Contrasena: str
