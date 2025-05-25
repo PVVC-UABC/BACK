@@ -11,18 +11,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from hashlib import sha256
 from pydantic import BaseModel
-from datetime import datetime, timedelta, date, time, timedelta
+from datetime import datetime, timedelta, date, time, timedelta, timezone
 from typing import Optional, Union, List, Dict
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-ACCESS_TOKEN_EXPIRE_DAYS = 10
 
 app = FastAPI()
 
-origins = ["*"]
+origins = ["https://hospitalinfantil.org.mx"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -427,15 +426,15 @@ async def descargar_historial_paquetes():
     return StreamingResponse(pdf_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Historial_Paquetes.html"})
 
-@app.post("/logut")
+@app.post("/logout")
 async def root(response: Response):
     try:
-        response.delete_cookie("access_token")
+        response.delete_cookie("access_token",path="/")
         return {"message": "Logout exitoso"}
     except:
         response.status_code = status.HTTP_401_UNAUTHORIZED
         return {"message": "Token inválido"}
-
+    
 @app.post("/login")
 async def root(response: Response, login: login):
     try:
@@ -444,19 +443,57 @@ async def root(response: Response, login: login):
             hashed_password = sha256(login.Contrasena.encode()).hexdigest()
             cursor.execute("SELECT * FROM Usuario WHERE Correo = %s AND Contrasena = %s", (login.Correo, hashed_password))
             result = cursor.fetchall()
+            
             if not result:
-                response.status_code = status.HTTP_401_UNAUTHORIZED
-                return {"message": "Usuario o contraseña incorrectos"}
-            access_token = utils.create_access_token(
-                data={"idUsuario": result[0][0], "correo": result[0][5]},
-                expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+                return JSONResponse(
+                    content={"message": "Usuario o contraseña incorrectos"},
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            token = utils.create_access_token(data={
+                "idUsuario": result[0][0],
+                "correo": result[0][4],
+                "rol": result[0][5]
+            })
+
+            response = JSONResponse(
+                content={"message": "Login exitoso"},
+                status_code=status.HTTP_200_OK
             )
-            return {"access_token": access_token, "token_type": "bearer"}
+            response.set_cookie(
+                key="access_token",
+                value=token,
+                httponly=True,
+                secure=False,  # Solo en desarrollo
+                samesite="lax",
+                max_age=int(timedelta(days=10).total_seconds()),
+                path="/"
+            )
+            return response
+
+    except Exception as e:
+        return JSONResponse(
+            content={"message": "Error interno", "detail": str(e)},
+            status_code=500
+        )
+    finally:
+        connection.close()
+        
+@app.get("/fetchRol")
+async def root(response: Response, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = utils.verify_token(token)
+        if not payload:
+            response.status_code = status.HTTP_401_UNAUTHORIZED
+            return {"message": "Token inválido"}
+        return JSONResponse(
+            content={"rol": payload["rol"]},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
     except Exception as e:
         error = "Error: " + str(e)
         return error
-    finally:
-        connection.close()
 
 @app.get("/protectedAdmin")
 async def root(response: Response, token: str = Depends(oauth2_scheme)):
@@ -584,18 +621,27 @@ async def crear_usuario(usuario: Usuario, response: Response):
         connection.close()
         
 @app.put("/updateUsuario/{index}")
-async def root(index: int, response: Response, usuario: Usuario):
+async def root(index: int, response: Response, usuario: Usuario, token: str = Depends(oauth2_scheme)):
+    payload = utils.verify_token(token)
+    if payload["rol"] != "Administrador":
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return {"message": "No tienes permiso para acceder a esta ruta"}
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
+            contrasena = 0
             cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
             result = cursor.fetchall()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "No existe el usuario"}
+            if usuario.Contrasena == "":
+                contrasena = result[0][6]
+            else:
+                contrasena = sha256(usuario.Contrasena.encode()).hexdigest()
             cursor.execute(
                 "UPDATE Usuario SET Nombres = %s, ApellidoPaterno = %s, ApellidoMaterno = %s, Rol = %s, Correo = %s, Contrasena = %s WHERE idUsuario = %s",
-                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, sha256(usuario.Contrasena.encode()).hexdigest(), index)
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, contrasena, index)
             )
             connection.commit()
             return JSONResponse(
