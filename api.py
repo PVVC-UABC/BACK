@@ -119,8 +119,8 @@ class Pedido(BaseModel):
 
 class UpdatePedidoRequest(BaseModel):
     idPedido: int
-    Fecha: date | None = None
-    Hora: time | None = None
+    Fecha: Union[date, None] = None
+    Hora: Union[time, None] = None
     Estado: Union[str, None] = None
     idPaquete: Union[int, None] = None
     idEnfermero: Union[int, None] = None
