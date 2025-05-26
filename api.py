@@ -557,45 +557,6 @@ async def root(response: Response):
         error = "Error: " + str(e)
         return error
 
-@app.get("/getEquipos")
-async def root(response: Response):
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM Equipo")
-            result = cursor.fetchall()
-            if not result:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return {"message": "No se encontraron datos"}
-            return JSONResponse(
-                content=utils.tokenize(result, cursor.description),
-                media_type="application/json",
-                status_code=status.HTTP_200_OK
-            )
-
-    except Exception as e:
-        error = "Error: " + str(e)
-        return error
-    
-@app.get("/getEquipo/{index}")
-async def root(index : int, response: Response):
-    try:
-        connection = utils.get_connection()
-
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
-            result = cursor.fetchall()
-            if not result:
-                return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
-            return JSONResponse(
-                content=utils.tokenize(result, cursor.description),
-                media_type="application/json",
-                status_code=status.HTTP_200_OK
-            )   
-    except Exception as e:
-        error = "Error: " + str(e)
-        return error
-    
 
 @app.post("/postUsuario")
 async def crear_usuario(usuario: Usuario, response: Response):
@@ -875,7 +836,7 @@ async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str
     finally:
         connection.close()
 
-@app.get("/getInstrumento")
+@app.post("/getInstrumento")
 async def obtener_instrumento(data: GetInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
@@ -950,7 +911,7 @@ async def obtener_todos_los_instrumentos(response: Response,token: str = Depends
     finally:
         connection.close()
 
-@app.get("/getInstrumentosPorGrupo")
+@app.post("/getInstrumentosPorGrupo")
 async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
@@ -1130,7 +1091,7 @@ async def actualizar_equipo(equipo: PutEquipo, response: Response, token: str = 
     finally:
         connection.close()
 
-@app.get("/getEquipo")
+@app.post("/getEquipo")
 async def obtener_equipo(data: GetEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
@@ -1437,7 +1398,7 @@ async def obtener_todos_los_paquetes(response: Response, token: str = Depends(oa
     finally:
         connection.close()
 
-@app.get("/getPaquete")
+@app.post("/getPaquete")
 async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
@@ -1494,7 +1455,7 @@ async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: st
     finally:
         connection.close()
 
-@app.get("/getPaquetePorEspecialidad")
+@app.post("/getPaquetePorEspecialidad")
 async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
@@ -1962,7 +1923,7 @@ async def obtener_todos_los_pedidos(response: Response, token: str = Depends(oau
         connection.close()
 
 
-@app.get("/getPedido")
+@app.post("/getPedido")
 async def obtener_pedido(data: GetPedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
     try:
         connection = utils.get_connection()
