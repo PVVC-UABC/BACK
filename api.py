@@ -1838,7 +1838,7 @@ async def crear_pedido(pedido: Pedido, response: Response):
 
 
 @app.put("/updatePedido")
-async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
