@@ -64,6 +64,11 @@ class GetInstrumentosPorGrupoRequest(BaseModel):
 class NewEquipo(BaseModel):
     Nombre: str
 
+class UpdatePaqueteRequest(BaseModel):
+    idPaquete: Union[int,None] = None  # Clave primaria
+    nombrePaquete: Union[str,None] = None  # Nombre del paquete
+    idEspecialidad: Union[int,None] = None  # Clave foránea a Especialidad
+
 class PutEquipo(BaseModel):
     idEquipo: int 
     Nombre: str
@@ -1234,6 +1239,55 @@ async def obtener_todos_los_equipos(response: Response):
     finally:
         connection.close()
 
+@app.put("/updatePaquete")
+async def actualizar_paquete(data: UpdatePaqueteRequest, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            if data.idPaquete:
+                cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
+                paquete_existente = cursor.fetchone()
+            elif data.nombrePaquete:
+                cursor.execute("SELECT idPaquete FROM Paquete WHERE Nombre = %s", (data.nombrePaquete,))
+                paquete_data = cursor.fetchone()
+                if paquete_data:
+                    data.idPaquete = paquete_data[0]
+                    paquete_existente = paquete_data
+                else:
+                    paquete_existente = None
+            else:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Debe proporcionar un idPaquete o un nombrePaquete"}
+
+            if not paquete_existente:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Paquete no encontrado"}
+
+            # Construir la consulta de actualización dinámicamente
+            campos_a_actualizar = []
+            valores = []
+
+            if data.nombrePaquete:
+                campos_a_actualizar.append("Nombre = %s")
+                valores.append(data.nombrePaquete)
+            if data.idEspecialidad:
+                campos_a_actualizar.append("idEspecialidad = %s")
+                valores.append(data.idEspecialidad)
+
+            if campos_a_actualizar:
+                consulta_update = f"UPDATE Paquete SET {', '.join(campos_a_actualizar)} WHERE idPaquete = %s"
+                valores.append(data.idPaquete)
+                cursor.execute(consulta_update, tuple(valores))
+                connection.commit()
+
+            return {"message": f"Paquete {data.idPaquete} actualizado correctamente"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
 
 @app.delete("/deleteEquipo")
 async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
