@@ -21,7 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
-origins = ["https://hospitalinfantil.org.mx"]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -480,7 +480,7 @@ async def root(response: Response, login: login):
         connection.close()
         
 @app.get("/fetchRol")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if not payload:
@@ -496,7 +496,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
         return error
 
 @app.get("/protectedAdmin")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Administrador":
@@ -513,7 +513,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
 
     
 @app.get("/protectedAlmacenista")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Almacenista" and payload["rol"] != "Administrador":
@@ -529,7 +529,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
         return error
     
 @app.get("/protectedEnfermero")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Enfermero" and payload["rol"] != "Administrador":
@@ -557,6 +557,45 @@ async def root(response: Response):
         error = "Error: " + str(e)
         return error
 
+@app.get("/getEquipos")
+async def root(response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
+@app.get("/getEquipo/{index}")
+async def root(index : int, response: Response):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
+            result = cursor.fetchall()
+            if not result:
+                return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )   
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    
 
 @app.post("/postUsuario")
 async def crear_usuario(usuario: Usuario, response: Response):
@@ -582,11 +621,11 @@ async def crear_usuario(usuario: Usuario, response: Response):
         connection.close()
         
 @app.put("/updateUsuario/{index}")
-async def root(index: int, response: Response, usuario: Usuario, token: str = Depends(oauth2_scheme)):
-    payload = utils.verify_token(token)
-    if payload["rol"] != "Administrador":
-        response.status_code = status.HTTP_403_FORBIDDEN
-        return {"message": "No tienes permiso para acceder a esta ruta"}
+async def root(index: int, response: Response, usuario: Usuario):
+    # payload = utils.verify_token(token)
+    # if payload["rol"] != "Administrador":
+    #     response.status_code = status.HTTP_403_FORBIDDEN
+    #     return {"message": "No tienes permiso para acceder a esta ruta"}
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -795,15 +834,15 @@ async def root(index : int, response: Response):
         connection.close()
 
 @app.post("/postGInstrumento")
-async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_ginstrumento(grupo: GInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+        #     payload = utils.verify_token(token)
+        #     if payload["rol"] != "Administrador":
+        #         response.status_code = status.HTTP_403_FORBIDDEN
+        #         return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE CodigoDeBarras = %s", (grupo.CodigoDeBarras,))
             existe = cursor.fetchone()
@@ -837,16 +876,16 @@ async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str
         connection.close()
 
 @app.post("/getInstrumento")
-async def obtener_instrumento(data: GetInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_instrumento(data: GetInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idInstrumentoIndividual:
                 cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion, i.idInstrumentoGrupo
@@ -885,15 +924,14 @@ async def obtener_instrumento(data: GetInstrumentoRequest, response: Response, t
         connection.close()
 
 @app.get("/getInstrumentos")
-async def obtener_todos_los_instrumentos(response: Response,token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_instrumentos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-        with connection.cursor() as cursor:
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
             cursor.execute("""
                 SELECT i.idInstrumentoIndividual, i.idInstrumentoGrupo, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion
                 FROM IInstrumento i
@@ -912,14 +950,14 @@ async def obtener_todos_los_instrumentos(response: Response,token: str = Depends
         connection.close()
 
 @app.post("/getInstrumentosPorGrupo")
-async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
             if data.idInstrumentoGrupo:
                 cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion
@@ -953,16 +991,16 @@ async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, r
 
 
 @app.put("/updateGInstrumento")
-async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idInstrumento:
                 cursor.execute("SELECT idInstrumento, Cantidad FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
@@ -1036,15 +1074,15 @@ async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Res
         connection.close()
 
 @app.post("/postEquipo")
-async def crear_equipo(equipo: NewEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_equipo(equipo: NewEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
             cursor.execute("INSERT INTO Equipo (Nombre) VALUES (%s)", (equipo.Nombre,))
             connection.commit()
             return {"message": "Equipo registrado correctamente"}
@@ -1057,15 +1095,15 @@ async def crear_equipo(equipo: NewEquipo, response: Response, token: str = Depen
         connection.close()
 
 @app.put("/updateEquipo")
-async def actualizar_equipo(equipo: PutEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_equipo(equipo: PutEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
             idEquipo = equipo.idEquipo
             nuevoNombre = equipo.Nombre
 
@@ -1092,16 +1130,16 @@ async def actualizar_equipo(equipo: PutEquipo, response: Response, token: str = 
         connection.close()
 
 @app.post("/getEquipo")
-async def obtener_equipo(data: GetEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_equipo(data: GetEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idEquipo:
                 cursor.execute("""SELECT idEquipo, Nombre FROM Equipo WHERE idEquipo = %s""", (data.idEquipo,))
@@ -1137,16 +1175,16 @@ async def obtener_equipo(data: GetEquipoRequest, response: Response, token: str 
         connection.close()
 
 @app.get("/getEquipos")
-async def obtener_todos_los_equipos(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_equipos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
             cursor.execute("SELECT idEquipo, Nombre FROM Equipo")
             equipos = cursor.fetchall()
 
@@ -1161,15 +1199,15 @@ async def obtener_todos_los_equipos(response: Response, token: str = Depends(oau
 
 
 @app.delete("/deleteEquipo")
-async def eliminar_equipo(data: DeleteEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idEquipo:
                 cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
@@ -1199,15 +1237,15 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response, token: 
         connection.close()
 
 @app.put("/updateEquipoInstrumento")
-async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
             equipo_existente = cursor.fetchone()
@@ -1263,15 +1301,15 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
 
 
 @app.delete("/deleteEquipoInstrumento")
-async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
             equipo_existente = cursor.fetchone()
@@ -1316,15 +1354,15 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
 
 
 @app.post("/postPaquete")
-async def crear_paquete(data: PostPaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_paquete(data: PostPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idEspecialidad FROM Especialidad WHERE idEspecialidad = %s", (data.idEspecialidad,))
             especialidad_existente = cursor.fetchone()
@@ -1373,15 +1411,15 @@ async def crear_paquete(data: PostPaqueteRequest, response: Response, token: str
 
 
 @app.get("/getPaquetes")
-async def obtener_todos_los_paquetes(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_paquetes(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
             cursor.execute("""
                 SELECT p.idPaquete, p.Nombre, e.Nombre AS Especialidad
                 FROM Paquete p
@@ -1399,16 +1437,16 @@ async def obtener_todos_los_paquetes(response: Response, token: str = Depends(oa
         connection.close()
 
 @app.post("/getPaquete")
-async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_paquete(data: GetPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idPaquete:
                 cursor.execute("""SELECT p.idPaquete, p.Nombre, e.Nombre AS Especialidad
@@ -1456,16 +1494,16 @@ async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: st
         connection.close()
 
 @app.post("/getPaquetePorEspecialidad")
-async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idEspecialidad:
                 cursor.execute("""SELECT p.idPaquete, p.Nombre, e.Nombre AS Especialidad
@@ -1497,16 +1535,16 @@ async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadReques
         connection.close()
 
 @app.delete("/deletePaquete")
-async def eliminar_paquete(data: DeletePaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if data.idPaquete:
                 cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
@@ -1543,15 +1581,15 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response, token
 
 
 @app.put("/updatePaqueteInstrumento")
-async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
             paquete_existente = cursor.fetchone()
@@ -1624,15 +1662,15 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
         connection.close()
 
 @app.post("/postPaqueteEquipo")
-async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
             cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
             paquete_existente = cursor.fetchone()
             if not paquete_existente:
@@ -1662,16 +1700,16 @@ async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response, token
         connection.close()
 
 @app.delete("/deletePaqueteEquipo")
-async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
             paquete_existente = cursor.fetchone()
@@ -1725,16 +1763,16 @@ async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Re
         connection.close()
 
 @app.post("/postPedido")
-async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_pedido(pedido: Pedido, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             if pedido.idPaquete:
                 cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (pedido.idPaquete,))
@@ -1775,16 +1813,16 @@ async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(
         connection.close()
 
 @app.put("/updatePedido")
-async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (pedido.idPedido,))
             pedido_existente = cursor.fetchone()
@@ -1853,16 +1891,16 @@ async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, tok
 
 
 @app.delete("/deletePedido")
-async def eliminar_pedido(data: DeletePedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_pedido(data: DeletePedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
@@ -1885,16 +1923,16 @@ async def eliminar_pedido(data: DeletePedidoRequest, response: Response, token: 
         connection.close()
 
 @app.get("/getPedidos")
-async def obtener_todos_los_pedidos(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_pedidos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("""
                 SELECT idPedido, Fecha, TIME_FORMAT(Hora, '%H:%i:%s'), Estado, idPaquete, idEnfermero, Cirugia, Ubicacion
@@ -1924,16 +1962,16 @@ async def obtener_todos_los_pedidos(response: Response, token: str = Depends(oau
 
 
 @app.post("/getPedido")
-async def obtener_pedido(data: GetPedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_pedido(data: GetPedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("""
                 SELECT p.idPedido, p.Fecha, 
@@ -1986,16 +2024,16 @@ async def obtener_pedido(data: GetPedidoRequest, response: Response, token: str 
         connection.close()
 
 @app.post("/postPedidoInstrumento")
-async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
@@ -2062,16 +2100,16 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
 
 
 @app.put("/updatePedidoInstrumento")
-async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
@@ -2151,16 +2189,16 @@ async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Resp
         connection.close()
 
 @app.put("/updatePedidoEquipo")
-async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
@@ -2207,16 +2245,16 @@ async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response, toke
         connection.close()
 
 @app.delete("/deletePedidoEquipo")
-async def eliminar_equipos_pedido(data: DeletePedidoEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_equipos_pedido(data: DeletePedidoEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            payload = utils.verify_token(token)
-            if payload["rol"] != "Administrador":
-                response.status_code = status.HTTP_403_FORBIDDEN
-                return {"message": "No tienes permiso para acceder a esta ruta"}
+            # payload = utils.verify_token(token)
+            # if payload["rol"] != "Administrador":
+            #     response.status_code = status.HTTP_403_FORBIDDEN
+            #     return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
