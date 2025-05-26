@@ -810,7 +810,7 @@ async def root(nombre : str, response: Response):
     finally:
         connection.close()
 
-@app.update("/updateEspecialidad")
+@app.put("/updateEspecialidad")
 async def root(response: Response, especialidad: Especialidad):
     try:
         connection = utils.get_connection()
