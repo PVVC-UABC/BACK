@@ -125,6 +125,19 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
         error = "Error: " + str(e)
         return error
 
+@app.post("/logout")
+async def logout(response: Response):
+    try:
+        response.delete_cookie("access_token", path="/")
+        return JSONResponse(
+            content={"message": "Logout exitoso"},
+            media_type="application/json",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+
 @app.get("/getMemoryUsage")
 async def root(response: Response):
     try:
@@ -396,6 +409,27 @@ async def root(index : int, response: Response):
             connection.commit()
             return JSONResponse(
                 content={"message": "Especialidad eliminada correctamente"},
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.get("/getGInstrumentos")
+async def root(response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM GInstrumento")
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No se encontraron datos"}
+            return JSONResponse(
+                content=utils.tokenize(result, cursor.description),
                 media_type="application/json",
                 status_code=status.HTTP_200_OK
             )
