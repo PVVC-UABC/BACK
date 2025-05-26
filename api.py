@@ -403,7 +403,7 @@ async def root(response: Response, login: login):
         connection.close()
         
 @app.get("/fetchRol")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if not payload:
@@ -419,7 +419,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
         return error
 
 @app.get("/protectedAdmin")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Administrador":
@@ -436,7 +436,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
 
     
 @app.get("/protectedAlmacenista")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Almacenista" and payload["rol"] != "Administrador":
@@ -452,7 +452,7 @@ async def root(response: Response, token: str = Depends(oauth2_scheme)):
         return error
     
 @app.get("/protectedEnfermero")
-async def root(response: Response, token: str = Depends(oauth2_scheme)):
+async def root(response: Response):
     try:
         payload = utils.verify_token(token)
         if payload["rol"] != "Enfermero" and payload["rol"] != "Administrador":
@@ -544,7 +544,7 @@ async def crear_usuario(usuario: Usuario, response: Response):
         connection.close()
         
 @app.put("/updateUsuario/{index}")
-async def root(index: int, response: Response, usuario: Usuario, token: str = Depends(oauth2_scheme)):
+async def root(index: int, response: Response, usuario: Usuario):
     # payload = utils.verify_token(token)
     # if payload["rol"] != "Administrador":
     #     response.status_code = status.HTTP_403_FORBIDDEN
@@ -757,7 +757,7 @@ async def root(index : int, response: Response):
         connection.close()
 
 @app.post("/postGInstrumento")
-async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_ginstrumento(grupo: GInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -799,7 +799,7 @@ async def crear_ginstrumento(grupo: GInstrumento, response: Response, token: str
         connection.close()
 
 @app.get("/getInstrumento")
-async def obtener_instrumento(data: GetInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_instrumento(data: GetInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -847,7 +847,7 @@ async def obtener_instrumento(data: GetInstrumentoRequest, response: Response, t
         connection.close()
 
 @app.get("/getInstrumentos")
-async def obtener_todos_los_instrumentos(response: Response,token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_instrumentos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -873,7 +873,7 @@ async def obtener_todos_los_instrumentos(response: Response,token: str = Depends
         connection.close()
 
 @app.get("/getInstrumentosPorGrupo")
-async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -914,7 +914,7 @@ async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, r
 
 
 @app.put("/updateGInstrumento")
-async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -997,7 +997,7 @@ async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Res
         connection.close()
 
 @app.post("/postEquipo")
-async def crear_equipo(equipo: NewEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_equipo(equipo: NewEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1018,7 +1018,7 @@ async def crear_equipo(equipo: NewEquipo, response: Response, token: str = Depen
         connection.close()
 
 @app.put("/updateEquipo")
-async def actualizar_equipo(equipo: PutEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_equipo(equipo: PutEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1053,7 +1053,7 @@ async def actualizar_equipo(equipo: PutEquipo, response: Response, token: str = 
         connection.close()
 
 @app.get("/getEquipo")
-async def obtener_equipo(data: GetEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_equipo(data: GetEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1098,7 +1098,7 @@ async def obtener_equipo(data: GetEquipoRequest, response: Response, token: str 
         connection.close()
 
 @app.get("/getEquipos")
-async def obtener_todos_los_equipos(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_equipos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1122,7 +1122,7 @@ async def obtener_todos_los_equipos(response: Response, token: str = Depends(oau
 
 
 @app.delete("/deleteEquipo")
-async def eliminar_equipo(data: DeleteEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1160,7 +1160,7 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response, token: 
         connection.close()
 
 @app.put("/updateEquipoInstrumento")
-async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1224,7 +1224,7 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
 
 
 @app.delete("/deleteEquipoInstrumento")
-async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1277,7 +1277,7 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
 
 
 @app.post("/postPaquete")
-async def crear_paquete(data: PostPaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_paquete(data: PostPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1334,7 +1334,7 @@ async def crear_paquete(data: PostPaqueteRequest, response: Response, token: str
 
 
 @app.get("/getPaquetes")
-async def obtener_todos_los_paquetes(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_paquetes(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1360,7 +1360,7 @@ async def obtener_todos_los_paquetes(response: Response, token: str = Depends(oa
         connection.close()
 
 @app.get("/getPaquete")
-async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_paquete(data: GetPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1417,7 +1417,7 @@ async def obtener_paquete(data: GetPaqueteRequest, response: Response, token: st
         connection.close()
 
 @app.get("/getPaquetePorEspecialidad")
-async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1458,7 +1458,7 @@ async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadReques
         connection.close()
 
 @app.delete("/deletePaquete")
-async def eliminar_paquete(data: DeletePaqueteRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1504,7 +1504,7 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response, token
 
 
 @app.put("/updatePaqueteInstrumento")
-async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1585,7 +1585,7 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
         connection.close()
 
 @app.post("/postPaqueteEquipo")
-async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1623,7 +1623,7 @@ async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response, token
         connection.close()
 
 @app.delete("/deletePaqueteEquipo")
-async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1686,7 +1686,7 @@ async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Re
         connection.close()
 
 @app.post("/postPedido")
-async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_pedido(pedido: Pedido, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1736,7 +1736,7 @@ async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(
         connection.close()
 
 @app.put("/updatePedido")
-async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1814,7 +1814,7 @@ async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, tok
 
 
 @app.delete("/deletePedido")
-async def eliminar_pedido(data: DeletePedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_pedido(data: DeletePedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1846,7 +1846,7 @@ async def eliminar_pedido(data: DeletePedidoRequest, response: Response, token: 
         connection.close()
 
 @app.get("/getPedidos")
-async def obtener_todos_los_pedidos(response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_todos_los_pedidos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1885,7 +1885,7 @@ async def obtener_todos_los_pedidos(response: Response, token: str = Depends(oau
 
 
 @app.get("/getPedido")
-async def obtener_pedido(data: GetPedidoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def obtener_pedido(data: GetPedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -1947,7 +1947,7 @@ async def obtener_pedido(data: GetPedidoRequest, response: Response, token: str 
         connection.close()
 
 @app.post("/postPedidoInstrumento")
-async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -2023,7 +2023,7 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
 
 
 @app.put("/updatePedidoInstrumento")
-async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -2112,7 +2112,7 @@ async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Resp
         connection.close()
 
 @app.put("/updatePedidoEquipo")
-async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response, token: str = Depends(oauth2_scheme)):
+async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
@@ -2168,7 +2168,7 @@ async def actualizar_equipos_pedido(data: PedidoEquipo, response: Response, toke
         connection.close()
 
 @app.delete("/deletePedidoEquipo")
-async def eliminar_equipos_pedido(data: DeletePedidoEquipoRequest, response: Response, token: str = Depends(oauth2_scheme)):
+async def eliminar_equipos_pedido(data: DeletePedidoEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
