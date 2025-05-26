@@ -1798,7 +1798,7 @@ async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Re
 
 
 @app.post("/postPedido")
-async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(oauth2_scheme)):
+async def crear_pedido(pedido: Pedido, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
