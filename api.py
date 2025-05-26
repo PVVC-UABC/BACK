@@ -1734,35 +1734,24 @@ async def crear_pedido(pedido: Pedido, response: Response, token: str = Depends(
                 response.status_code = status.HTTP_403_FORBIDDEN
                 return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"],))
 
             if pedido.idPaquete:
                 cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (pedido.idPaquete,))
-                paquete_existente = cursor.fetchone()
-                if not paquete_existente:
+                if not cursor.fetchone():
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": "Paquete no encontrado"}
 
-            idEnfermero = pedido.idEnfermero
-            if not idEnfermero and pedido.nombreEnfermero:
-                cursor.execute("""
-                    SELECT idUsuario FROM Usuario 
-                    WHERE CONCAT(Nombres, ' ', ApellidoPaterno, ' ', ApellidoMaterno) = %s
-                """, (pedido.nombreEnfermero,))
-                enfermero_data = cursor.fetchone()
-                if not enfermero_data:
-                    response.status_code = status.HTTP_404_NOT_FOUND
-                    return {"message": f"Enfermero con nombre completo '{pedido.nombreEnfermero}' no encontrado"}
-                idEnfermero = enfermero_data[0]  # Asignar el id encontrado
-
-            if not idEnfermero:
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return {"message": "Debe proporcionar un idEnfermero o un nombreEnfermero"}
+            cursor.execute("SELECT rol FROM Usuario WHERE idUsuario = %s", (pedido.idEnfermero,))
+            enfermero_rol = cursor.fetchone()
+            if not enfermero_rol or enfermero_rol[0] != "Enfermero":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "El usuario asignado no tiene el rol de Enfermero"}
 
             cursor.execute("""
                 INSERT INTO Pedido (Fecha, Hora, Estado, idPaquete, idEnfermero, Cirugia, Ubicacion)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (pedido.Fecha, pedido.Hora, pedido.Estado, pedido.idPaquete, idEnfermero, pedido.Cirugia, pedido.Ubicacion))
+            """, (pedido.Fecha, pedido.Hora, pedido.Estado, pedido.idPaquete, pedido.idEnfermero, pedido.Cirugia, pedido.Ubicacion))
 
             connection.commit()
             return {"message": "Pedido registrado correctamente"}
@@ -1784,32 +1773,37 @@ async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, tok
                 response.status_code = status.HTTP_403_FORBIDDEN
                 return {"message": "No tienes permiso para acceder a esta ruta"}
 
-            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            cursor.execute("SET @idUsuario = %s", (payload["idUsuario"],))
 
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (pedido.idPedido,))
-            pedido_existente = cursor.fetchone()
-            if not pedido_existente:
+            if not cursor.fetchone():
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "Pedido no encontrado"}
 
             if pedido.idPaquete:
                 cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (pedido.idPaquete,))
-                paquete_existente = cursor.fetchone()
-                if not paquete_existente:
+                if not cursor.fetchone():
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": "Paquete no encontrado"}
 
             idEnfermero = pedido.idEnfermero
+
             if not idEnfermero and pedido.nombreEnfermero:
                 cursor.execute("""
                     SELECT idUsuario FROM Usuario 
-                    WHERE CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno) = %s
+                    WHERE CONCAT(Nombres, ' ', ApellidoPaterno, ' ', ApellidoMaterno) = %s
                 """, (pedido.nombreEnfermero,))
                 enfermero_data = cursor.fetchone()
                 if not enfermero_data:
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": f"Enfermero con nombre completo '{pedido.nombreEnfermero}' no encontrado"}
-                idEnfermero = enfermero_data[0]  
+                idEnfermero = enfermero_data[0]  # Asignar el id encontrado
+
+            cursor.execute("SELECT rol FROM Usuario WHERE idUsuario = %s", (idEnfermero,))
+            enfermero_rol = cursor.fetchone()
+            if not enfermero_rol or enfermero_rol[0] != "Enfermero":
+                response.status_code = status.HTTP_403_FORBIDDEN
+                return {"message": "El usuario asignado no tiene el rol de Enfermero"}
 
             campos_a_actualizar = []
             valores = []
@@ -1850,6 +1844,7 @@ async def actualizar_pedido(pedido: UpdatePedidoRequest, response: Response, tok
 
     finally:
         connection.close()
+
 
 
 @app.delete("/deletePedido")
