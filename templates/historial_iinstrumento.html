@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial de Instrumentos Individuales</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Historial de Instrumentos Individuales</h1>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID Historial</th>
+                <th>Herramienta</th>
+                <th>Observaciones</th>
+                <th>Fecha de Cambio</th>
+                <th>Usuario</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for instrumento in historial_iinstrumento %}
+            <tr>
+                <td>{{ instrumento[0] }}</td>  <!-- ID Historial -->
+                <td>{{ instrumento[1] }}</td>  <!-- Nombre Herramienta -->
+                <td>{{ instrumento[2] }}</td>  <!-- Observaciones -->
+                <td>{{ instrumento[3] }}</td>  <!-- Fecha de Cambio -->
+                <td>{{ instrumento[4] }}</td>  <!-- Usuario -->
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>Reporte generado automáticamente por el sistema.</p>
+    </div>
+</body>
+</html>

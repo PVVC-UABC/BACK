@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial de Pedidos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Historial de Pedidos</h1>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID Pedido</th>
+                <th>Estado Anterior</th>
+                <th>Estado Nuevo</th>
+                <th>Fecha de Cambio</th>
+                <th>Usuario</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pedido in historial_pedido %}
+            <tr>
+                <td>{{ pedido[1] }}</td>  <!-- ID del Pedido -->
+                <td>{{ pedido[2] }}</td>  <!-- Estado Anterior -->
+                <td>{{ pedido[3] }}</td>  <!-- Estado Nuevo -->
+                <td>{{ pedido[4] }}</td>  <!-- Fecha de Cambio -->
+                <td>{{ pedido[5] }}</td>  <!-- Usuario -->
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>Reporte generado automáticamente por el sistema.</p>
+    </div>
+</body>
+</html>

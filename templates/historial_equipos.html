@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial de Equipos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Historial de Equipos</h1>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID Historial</th>
+                <th>Equipo</th>
+                <th>Instrumento</th>
+                <th>Operación</th>
+                <th>Campo</th>
+                <th>Valor Anterior</th>
+                <th>Valor Nuevo</th>
+                <th>Observaciones</th>
+                <th>Fecha de Cambio</th>
+                <th>Usuario</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for equipo in historial_equipos %}
+            <tr>
+                <td>{{ equipo[0] }}</td>  <!-- ID Historial -->
+                <td>{{ equipo[1] }}</td>  <!-- Nombre Equipo -->
+                <td>{{ equipo[2] }}</td>  <!-- Nombre Instrumento -->
+                <td>{{ equipo[3] }}</td>  <!-- Tipo de Operación -->
+                <td>{{ equipo[4] }}</td>  <!-- Campo -->
+                <td>{{ equipo[5] }}</td>  <!-- Valor Anterior -->
+                <td>{{ equipo[6] }}</td>  <!-- Valor Nuevo -->
+                <td>{{ equipo[7] }}</td>  <!-- Observaciones -->
+                <td>{{ equipo[8] }}</td>  <!-- Fecha de Cambio -->
+                <td>{{ equipo[9] }}</td>  <!-- Usuario -->
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>Reporte generado automáticamente por el sistema.</p>
+    </div>
+</body>
+</html>
