@@ -909,7 +909,7 @@ async def crear_ginstrumento(grupo: GInstrumento, response: Response):
     finally:
         connection.close()
 
-@app.get("/getInstrumento")
+@app.post("/getInstrumento")
 async def obtener_instrumento(data: GetInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
@@ -983,7 +983,7 @@ async def obtener_todos_los_instrumentos(response: Response):
     finally:
         connection.close()
 
-@app.get("/getInstrumentosPorGrupo")
+@app.post("/getInstrumentosPorGrupo")
 async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, response: Response):
     try:
         connection = utils.get_connection()
@@ -1163,7 +1163,7 @@ async def actualizar_equipo(equipo: PutEquipo, response: Response):
     finally:
         connection.close()
 
-@app.get("/getEquipo")
+@app.post("/getEquipo")
 async def obtener_equipo(data: GetEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
@@ -1527,7 +1527,7 @@ async def obtener_paquete(data: GetPaqueteRequest, response: Response):
     finally:
         connection.close()
 
-@app.get("/getPaquetePorEspecialidad")
+@app.post("/getPaquetePorEspecialidad")
 async def obtener_paquete_por_especialidad(data: GetPaquetePorEspecialidadRequest, response: Response):
     try:
         connection = utils.get_connection()
@@ -1995,7 +1995,7 @@ async def obtener_todos_los_pedidos(response: Response):
         connection.close()
 
 
-@app.get("/getPedido")
+@app.post("/getPedido")
 async def obtener_pedido(data: GetPedidoRequest, response: Response):
     try:
         connection = utils.get_connection()
