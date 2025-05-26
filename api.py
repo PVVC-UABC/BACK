@@ -98,6 +98,10 @@ class GetPaquetePorEspecialidadRequest(BaseModel):
     idEspecialidad: Union[int, None] = None
     nombreEspecialidad: Union[str, None] = None
 
+class Especialidad(BaseModel):
+    idEspecialidad: Union[int, None] = None
+    Nombre: str
+
 class PaqueteInstrumento(BaseModel):
     idPaquete: int
     instrumentos: List[Dict] 
@@ -797,6 +801,36 @@ async def root(nombre : str, response: Response):
             connection.commit()
             return JSONResponse(
                 content={"message": "Especialidad insertada correctamente"},
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        error = "Error: " + str(e)
+        return error
+    finally:
+        connection.close()
+
+@app.update("/updateEspecialidad")
+async def root(response: Response, especialidad: Especialidad):
+    try:
+        connection = utils.get_connection()
+
+        with connection.cursor() as cursor:
+            if especialidad.idEspecialidad is None:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Debe proporcionar un idEspecialidad o un Nombre"}
+            elif especialidad.Nombre is None:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "No hay cambios"}
+            cursor.execute("SELECT * FROM Especialidad WHERE idEspecialidad = %s", (especialidad.idEspecialidad))
+            result = cursor.fetchall()
+            if not result:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "No existe la especialidad"}
+            cursor.execute("UPDATE Especialidad SET Nombre = %s WHERE idEspecialidad = %s", (especialidad.Nombre, especialidad.idEspecialidad))
+            connection.commit()
+            return JSONResponse(
+                content={"message": "Especialidad actualizada correctamente"},
                 media_type="application/json",
                 status_code=status.HTTP_200_OK
             )
