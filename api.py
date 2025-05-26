@@ -37,7 +37,7 @@ class Usuario(BaseModel):
     ApellidoMaterno: str
     Rol: str
     Correo: str
-    Contrasena: str
+    Contrasena: Union[str,None] = None
 
 class login(BaseModel):
     Correo: str
