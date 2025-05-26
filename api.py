@@ -1436,7 +1436,7 @@ async def obtener_todos_los_paquetes(response: Response):
     finally:
         connection.close()
 
-@app.get("/getPaquete")
+@app.post("/getPaquete")
 async def obtener_paquete(data: GetPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
