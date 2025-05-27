@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Paquetes, Equipos e Instrumentos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tfoot {
+            font-weight: bold;
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Estado de Paquetes</h2>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    {% for paquete_id, paquete in paquetes_por_grupo.items() %}
+    <h3>Paquete: {{ paquete.nombrePaquete }} (ID: {{ paquete_id }}) - Especialidad: {{ paquete.idEspecialidad }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID Equipo</th>
+                <th>Nombre Equipo</th>
+                <th>ID Instrumento</th>
+                <th>Nombre Instrumento</th>
+                <th>Código de Barras</th>
+                <th>Cantidad</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for instrumento in paquete.datos %}
+            <tr>
+                <td>{{ instrumento[0] }}</td>
+                <td>{{ instrumento[1] }}</td>
+                <td>{{ instrumento[2] }}</td>
+                <td>{{ instrumento[3] }}</td>
+                <td>{{ instrumento[4] }}</td>
+                <td>{{ instrumento[5] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5">Cantidad Total de Instrumentos en Paquete</td>
+                <td>{{ paquete.cantidad_total_instrumentos }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endfor %}
+</body>
+</html>
