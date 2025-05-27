@@ -61,13 +61,17 @@ class GetInstrumentosPorGrupoRequest(BaseModel):
     idInstrumentoGrupo: Union[int, None] = None
     nombreInstrumentoGrupo: Union[str, None] = None
 
+class DeleteGInstrumentoRequest(BaseModel):
+    idInstrumento: Union[int, None] = None
+    nombreInstrumento: Union[str, None] = None
+
 class NewEquipo(BaseModel):
     Nombre: str
 
 class UpdatePaqueteRequest(BaseModel):
-    idPaquete: Union[int,None] = None  # Clave primaria
-    nombrePaquete: Union[str,None] = None  # Nombre del paquete
-    idEspecialidad: Union[int,None] = None  # Clave foránea a Especialidad
+    idPaquete: Union[int,None] = None  
+    nombrePaquete: Union[str,None] = None  
+    idEspecialidad: Union[int,None] = None  
 
 class PutEquipo(BaseModel):
     idEquipo: int 
@@ -198,7 +202,6 @@ def obtener_datos_historial_paquetes():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # ✅ Obtener el historial con nombres de paquetes y usuarios
             cursor.execute("""
                 SELECT hp.idHistorialPaquete, p.Nombre AS nombrePaquete, hp.tipoOperacion, 
                        hp.campo, hp.valorAnterior, hp.valorNuevo, hp.observaciones, hp.fechaCambio, 
@@ -210,7 +213,6 @@ def obtener_datos_historial_paquetes():
             """)
             historial_paquetes = cursor.fetchall()
 
-            # ✅ Obtener los nombres de los equipos directamente desde la tabla `Equipo`
             cursor.execute("""
                 SELECT e.idEquipo, e.Nombre AS nombreEquipo
                 FROM Equipo e;
@@ -337,7 +339,6 @@ def obtener_datos_historial_ginstrumento():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # ✅ Obtener historial con nombres de instrumentos y usuarios
             cursor.execute("""
                 SELECT hg.idHistorial, gi.Nombre AS nombreInstrumento, 
                        hg.observaciones, hg.fechaCambio, 
@@ -1115,6 +1116,46 @@ async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Res
     finally:
         connection.close()
 
+@app.delete("/deleteGInstrumento")
+async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            if data.idInstrumento:
+                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
+                grupo = cursor.fetchone()
+            elif data.nombreInstrumento:
+                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (data.nombreInstrumento,))
+                grupo = cursor.fetchone()
+            else:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Debe proporcionar un idInstrumento o un nombreInstrumento"}
+
+            if not grupo:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Grupo de instrumentos no encontrado"}
+
+            idInstrumento = grupo[0]
+
+            cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoGrupo = %s", (idInstrumento,))
+
+            cursor.execute("DELETE FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+            cursor.execute("DELETE FROM Paquete_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+            cursor.execute("DELETE FROM Pedido_GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+
+            cursor.execute("DELETE FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+
+            connection.commit()
+            return {"message": "Grupo de instrumentos eliminado correctamente junto con sus instrumentos asociados"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+
 @app.post("/postEquipo")
 async def crear_equipo(equipo: NewEquipo, response: Response):
     try:
@@ -1239,56 +1280,6 @@ async def obtener_todos_los_equipos(response: Response):
     finally:
         connection.close()
 
-@app.put("/updatePaquete")
-async def actualizar_paquete(data: UpdatePaqueteRequest, response: Response):
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            if data.idPaquete:
-                cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
-                paquete_existente = cursor.fetchone()
-            elif data.nombrePaquete:
-                cursor.execute("SELECT idPaquete FROM Paquete WHERE Nombre = %s", (data.nombrePaquete,))
-                paquete_data = cursor.fetchone()
-                if paquete_data:
-                    data.idPaquete = paquete_data[0]
-                    paquete_existente = paquete_data
-                else:
-                    paquete_existente = None
-            else:
-                response.status_code = status.HTTP_400_BAD_REQUEST
-                return {"message": "Debe proporcionar un idPaquete o un nombrePaquete"}
-
-            if not paquete_existente:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return {"message": "Paquete no encontrado"}
-
-            # Construir la consulta de actualización dinámicamente
-            campos_a_actualizar = []
-            valores = []
-
-            if data.nombrePaquete:
-                campos_a_actualizar.append("Nombre = %s")
-                valores.append(data.nombrePaquete)
-            if data.idEspecialidad:
-                campos_a_actualizar.append("idEspecialidad = %s")
-                valores.append(data.idEspecialidad)
-
-            if campos_a_actualizar:
-                consulta_update = f"UPDATE Paquete SET {', '.join(campos_a_actualizar)} WHERE idPaquete = %s"
-                valores.append(data.idPaquete)
-                cursor.execute(consulta_update, tuple(valores))
-                connection.commit()
-
-            return {"message": f"Paquete {data.idPaquete} actualizado correctamente"}
-
-    except Exception as e:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return {"error": str(e)}
-
-    finally:
-        connection.close()
-
 @app.delete("/deleteEquipo")
 async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
@@ -1332,12 +1323,7 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar que el equipo exista
             cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
             equipo_existente = cursor.fetchone()
             if not equipo_existente:
@@ -1345,22 +1331,14 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
                 return {"message": "Equipo no encontrado"}
 
             for herramienta in data.herramientas:
-                idInstrumento = herramienta.get("idInstrumento")
-                nombreInstrumento = herramienta.get("nombreInstrumento")
+                idInstrumento = herramienta["idInstrumento"]
                 cantidad = herramienta["cantidad"]
 
                 if cantidad <= 0:  
                     response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No se puede agregar o modificar un instrumento con cantidad {cantidad}"}
+                    return {"message": f"No se puede agregar un instrumento con cantidad {cantidad}"}
 
-                if nombreInstrumento:
-                    cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
-                    instrumento_data = cursor.fetchone()
-                    if not instrumento_data:
-                        response.status_code = status.HTTP_404_NOT_FOUND
-                        return {"message": f"Instrumento con nombre '{nombreInstrumento}' no encontrado"}
-                    idInstrumento = instrumento_data[0]
-
+                # Obtener cantidad total disponible en inventario
                 cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
                 instrumento_existente = cursor.fetchone()
                 if not instrumento_existente:
@@ -1369,19 +1347,25 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
 
                 cantidad_disponible = instrumento_existente[0]
 
-                if cantidad_disponible <= 0:  
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No hay unidades disponibles del instrumento con id {idInstrumento}, no se puede agregar"}
+                # Obtener cantidad ya asignada a otros equipos
+                cursor.execute("SELECT SUM(cantidad) FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+                cantidad_asignada = cursor.fetchone()[0] or 0
 
-                cantidad_final = min(cantidad, cantidad_disponible)
+                # Validar si hay suficiente inventario disponible
+                cantidad_restante = cantidad_disponible - cantidad_asignada
+                if cantidad > cantidad_restante:
+                    response.status_code = status.HTTP_400_BAD_REQUEST
+                    return {"message": f"No hay suficientes unidades disponibles del instrumento {idInstrumento}. Quedan {cantidad_restante} disponibles."}
+
+                # Insertar o actualizar la cantidad en el equipo
                 cursor.execute("""
                     INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
                     VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE cantidad = %s
-                """, (data.idEquipo, idInstrumento, cantidad_final, cantidad_final))
+                """, (data.idEquipo, idInstrumento, cantidad, cantidad))
 
             connection.commit()
-            return {"message": "Cantidad de herramientas modificada o agregada correctamente"}
+            return {"message": "Cantidad de herramientas modificada correctamente"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
