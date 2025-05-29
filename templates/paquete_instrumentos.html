@@ -3,21 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historial de Paquetes</title>
+    <title>Historial de Paquetes, Equipos e Instrumentos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
             padding: 20px;
         }
-        h2, h3, h4 {
-            margin-bottom: 10px;
-        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
-            page-break-inside: avoid;
+            margin-top: 20px;
         }
         th, td {
             border: 1px solid #ddd;
@@ -31,77 +27,77 @@
             font-weight: bold;
             background-color: #e0e0e0;
         }
-        @media print {
-            body {
-                margin: 0;
-                padding: 0;
-            }
-            table {
-                page-break-inside: auto;
-            }
-        }
     </style>
 </head>
 <body>
-    <h2>Reporte de Paquetes</h2>
+    <h2>Estado de Paquetes</h2>
     <p>Fecha del reporte: {{ fecha_reporte }}</p>
 
     {% for paquete_id, paquete in paquetes_por_grupo.items() %}
-    <h3>Paquete: {{ paquete.nombrePaquete }} (ID: {{ paquete_id }})</h3>
+    <h3>Paquete: {{ paquete.nombrePaquete }} (ID: {{ paquete_id }}) - Especialidad: {{ paquete.idEspecialidad }}</h3>
 
-    {% for equipo_id, equipo in paquete.equipos.items() %}
-    <h4>Equipo: {{ equipo.nombreEquipo }} (ID: {{ equipo_id }})</h4>
+    <!-- Tabla 1: Instrumentos en Equipos dentro del Paquete -->
+    <h4>Instrumentos en Equipos</h4>
     <table>
         <thead>
             <tr>
+                <th>ID Equipo</th>
+                <th>Nombre Equipo</th>
                 <th>ID Instrumento</th>
                 <th>Nombre Instrumento</th>
+                <th>Código de Barras</th>
                 <th>Cantidad</th>
             </tr>
         </thead>
         <tbody>
-            {% for instrumento in equipo.instrumentos %}
+            {% for instrumento in paquete.datos %}
             <tr>
-                <td>{{ instrumento.idInstrumento }}</td>
-                <td>{{ instrumento.nombreInstrumento }}</td>
-                <td>{{ instrumento.cantidad }}</td>
+                <td>{{ instrumento[0] }}</td>
+                <td>{{ instrumento[1] }}</td>
+                <td>{{ instrumento[2] }}</td>
+                <td>{{ instrumento[3] }}</td>
+                <td>{{ instrumento[4] }}</td>
+                <td>{{ instrumento[5] }}</td>
             </tr>
             {% endfor %}
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="2">Total de Instrumentos en el Equipo</td>
-                <td>{{ equipo.total_instrumentos }}</td>
+                <td colspan="5">Cantidad Total de Instrumentos en Equipos</td>
+                <td>{{ paquete.cantidad_total_instrumentos }}</td>
             </tr>
         </tfoot>
     </table>
-    {% endfor %}
 
-    <h4>Instrumentos del Paquete</h4>
+    <!-- Tabla 2: Instrumentos Agregados Directamente al Paquete -->
+    <h4>Instrumentos Directos en Paquete</h4>
     <table>
         <thead>
             <tr>
                 <th>ID Instrumento</th>
                 <th>Nombre Instrumento</th>
+                <th>Código de Barras</th>
                 <th>Cantidad</th>
             </tr>
         </thead>
         <tbody>
             {% for instrumento in paquete.instrumentos_paquete %}
             <tr>
-                <td>{{ instrumento.idInstrumento }}</td>
-                <td>{{ instrumento.nombreInstrumento }}</td>
-                <td>{{ instrumento.cantidad }}</td>
+                <td>{{ instrumento[0] }}</td>
+                <td>{{ instrumento[1] }}</td>
+                <td>{{ instrumento[2] }}</td>
+                <td>{{ instrumento[3] }}</td>
             </tr>
             {% endfor %}
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="2">Total de Instrumentos en el Paquete</td>
-                <td>{{ total_instrumentos_paquete }}</td>
+                <td colspan="3">Cantidad Total de Instrumentos en Paquete</td>
+                <td>{{ paquete.cantidad_total_instrumentos_paquete }}</td>
             </tr>
         </tfoot>
     </table>
+
     {% endfor %}
 </body>
 </html>

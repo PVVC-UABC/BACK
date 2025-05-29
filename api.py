@@ -16,6 +16,7 @@ from starlette.responses import StreamingResponse
 
 
 
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
@@ -250,6 +251,8 @@ def obtener_datos_historial_paquetes():
         connection.close()
 
 def generar_pdf_historial_paquetes():
+    """Genera un PDF con el historial de paquetes usando Jinja2."""
+    
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     template = env.get_template("historial_paquetes.html")
 
@@ -257,17 +260,12 @@ def generar_pdf_historial_paquetes():
     if not datos:
         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
-    pdf_options = {
-        "page-size": "A4",
-        "margin-top": "15mm",
-        "encoding": "UTF-8",
-        "footer-right": "[page]/[topage]",
-        "quiet": "",
-    }
-
     html_renderizado = template.render(datos)
 
+    # Convertir el HTML renderizado en un objeto PDF en memoria
     return io.BytesIO(html_renderizado.encode("utf-8"))
+
+
 
 def obtener_datos_historial_pedido():
     try:
@@ -470,72 +468,64 @@ def obtener_datos_paquete():
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT p.idPaquete, p.Nombre AS nombrePaquete,
-                    pe.idEquipo, e.Nombre AS nombreEquipo,
-                    ei.idInstrumento AS idInstrumentoEquipo, gi.Nombre AS nombreInstrumentoEquipo, ei.cantidad AS cantidadInstrumentoEquipo
+                SELECT p.idPaquete, p.Nombre AS nombrePaquete, p.idEspecialidad, 
+                       e.idEquipo, e.Nombre AS nombreEquipo, 
+                       gi.idInstrumento AS idInstrumentoGrupo, gi.Nombre AS nombreInstrumento, 
+                       gi.CodigoDeBarras AS codigoInstrumento, COALESCE(ei.cantidad, 0) AS cantidad_instrumento_equipo
                 FROM Paquete p
                 LEFT JOIN Paquete_Equipo pe ON p.idPaquete = pe.idPaquete
                 LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
                 LEFT JOIN Equipo_Instrumento ei ON e.idEquipo = ei.idEquipo
                 LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                ORDER BY p.idPaquete, pe.idEquipo, ei.idInstrumento ASC;
+                ORDER BY p.idPaquete, e.idEquipo, gi.idInstrumento ASC;
             """)
-            equipos_datos = cursor.fetchall()
+            paquete_datos = cursor.fetchall()
 
             cursor.execute("""
-                SELECT pi.idPaquete, pi.idInstrumento, gi.Nombre AS nombreInstrumentoPaquete, pi.cantidad AS cantidadInstrumentoPaquete
-                FROM Paquete_Instrumento pi
+                SELECT p.idPaquete, gi.idInstrumento, gi.Nombre, gi.CodigoDeBarras, COALESCE(pi.cantidad, 0)
+                FROM Paquete p
+                LEFT JOIN Paquete_Instrumento pi ON p.idPaquete = pi.idPaquete
                 LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
-                ORDER BY pi.idPaquete, pi.idInstrumento ASC;
+                ORDER BY p.idPaquete, gi.idInstrumento ASC;
             """)
-            instrumentos_paquete_datos = cursor.fetchall()
+            paquete_instrumentos = cursor.fetchall()
 
         paquetes_por_grupo = {}
-        for item in equipos_datos:
+        for item in paquete_datos:
             id_paquete = item[0]
             if id_paquete not in paquetes_por_grupo:
                 paquetes_por_grupo[id_paquete] = {
-                    "nombrePaquete": item[1],
-                    "equipos": {},
+                    "datos": [],
                     "instrumentos_paquete": [],
+                    "cantidad_total_instrumentos": 0,
+                    "cantidad_total_instrumentos_paquete": 0,
+                    "nombrePaquete": item[1],
+                    "idEspecialidad": item[2]
                 }
-            id_equipo = item[2]
-            if id_equipo not in paquetes_por_grupo[id_paquete]["equipos"]:
-                paquetes_por_grupo[id_paquete]["equipos"][id_equipo] = {
-                    "nombreEquipo": item[3],
-                    "instrumentos": [],
-                    "total_instrumentos": 0
-                }
-            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["instrumentos"].append({
-                "idInstrumento": item[4],
-                "nombreInstrumento": item[5],
-                "cantidad": item[6]
-            })
-            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["total_instrumentos"] += item[6]
-
-        total_instrumentos_paquete = 0
-        for item in instrumentos_paquete_datos:
+            
+            cantidad_equipo = int(item[8]) if item[8] is not None else 0
+            paquetes_por_grupo[id_paquete]["datos"].append(item[3:9])
+            paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos"] += cantidad_equipo
+        
+        for item in paquete_instrumentos:
             id_paquete = item[0]
             if id_paquete in paquetes_por_grupo:
-                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append({
-                    "idInstrumento": item[1],
-                    "nombreInstrumento": item[2],
-                    "cantidad": item[3]
-                })
-                total_instrumentos_paquete += item[3]
+                cantidad_paquete = int(item[4]) if item[4] is not None else 0
+                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append(item[1:5])
+                paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos_paquete"] += cantidad_paquete
 
         return {
             "paquetes_por_grupo": paquetes_por_grupo,
-            "total_instrumentos_paquete": total_instrumentos_paquete,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
+
     except pymysql.Error as e:
         print(f"Error MySQL: {e}")
         return None
     finally:
         connection.close()
 
-def generar_html_paquete():
+def generar_pdf_paquete():
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("paquete_instrumentos.html")
 
@@ -544,6 +534,7 @@ def generar_html_paquete():
         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
     html_renderizado = template.render(datos)
+
     return io.BytesIO(html_renderizado.encode("utf-8"))
 
 def obtener_datos_pedido():
@@ -779,16 +770,16 @@ async def descargar_pedido():
     return StreamingResponse(html_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Pedido_Instrumentos.html"})
 
-@app.get("/getPaqueteInstrumentos")
+@app.get("/getPaqueteEquiposInstrumentos")
 async def descargar_paquete():
-    html_file = generar_html_paquete()
-    return StreamingResponse(html_file, media_type="text/html",
-                             headers={"Content-Disposition": "inline; filename=Paquete_Instrumentos.html"})
+    pdf_file = generar_pdf_paquete()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Paquete_Equipos_Instrumentos.html"})
 
 @app.get("/getInstrumento")
 async def descargar_instrumento():
-    pdf_file = generar_pdf_instrumento()
-    return StreamingResponse(pdf_file, media_type="text/html",
+    html_file = generar_pdf_instrumento()
+    return StreamingResponse(html_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Instrumento.html"})
 
 @app.get("/getHistorialIInstrumento")
@@ -1550,10 +1541,10 @@ async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Resp
             valores = []
 
             if data.nuevoEstado:
-                estados_validos = ["Disponible", "En uso", "Dañado", "Esterilizado"]
+                estados_validos = ["Disponible", "En Uso", "Limpieza", "Pendiente", "Autoclave"]
                 if data.nuevoEstado not in estados_validos:
                     response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": "Estado inválido. Debe ser uno de: Disponible, En uso, Dañado, Esterilizado"}
+                    return {"message": "Estado inválido. Debe ser uno de: Disponible, En Uso, Limpieza, Pendiente, Autoclave"}
                 campos_actualizar.append("Estado = %s")
                 valores.append(data.nuevoEstado)
 
