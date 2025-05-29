@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Pedidos</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>Reporte de Pedidos</h1>
+    <p>Fecha de reporte: {{ fecha_reporte }}</p>
+
+    {% for id_pedido, pedido in pedidos_por_grupo.items() %}
+        <h2>Pedido #{{ id_pedido }}</h2>
+        <p><strong>Fecha:</strong> {{ pedido.fecha }} {{ pedido.hora }}</p>
+        <p><strong>Ubicación:</strong> {{ pedido.ubicacion }}</p>
+        <p><strong>Cirugía:</strong> {{ pedido.cirugia }}</p>
+        <p><strong>Estado:</strong> {{ pedido.estado }}</p>
+        <p><strong>Enfermero:</strong> {{ pedido.enfermero }}</p>
+        <p><strong>Paquete Asignado:</strong> {{ pedido.idPaquete }} - {{ pedido.nombrePaquete }}</p>
+
+        <h3>Equipos Asignados al Pedido</h3>
+        <table>
+            <tr><th>Equipo</th><th>Instrumentos</th></tr>
+            {% for equipo in pedido.equipos %}
+                <tr>
+                    <td>{{ equipo.nombreEquipo }}</td>
+                    <td>
+                        <ul>
+                        {% for instrumento in equipo.instrumentos %}
+                            <li>{{ instrumento.nombreInstrumento }} ({{ instrumento.cantidad }})</li>
+                        {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+            {% endfor %}
+            <tr>
+                <td colspan="2"><strong>Total de instrumentos en equipos:</strong> {{ pedido.total_instrumentos_equipo }}</td>
+            </tr>
+        </table>
+
+        <h3>Instrumentos Grupales del Pedido</h3>
+        <table>
+            <tr><th>Instrumento</th><th>Cantidad</th></tr>
+            {% for instrumento in pedido.instrumentos_grupo %}
+                <tr>
+                    <td>{{ instrumento.nombreInstrumentoGrupo }}</td>
+                    <td>{{ instrumento.cantidad }}</td>
+                </tr>
+            {% endfor %}
+            <tr>
+                <td colspan="2"><strong>Total de instrumentos grupales:</strong> {{ pedido.total_instrumentos_grupo }}</td>
+            </tr>
+        </table>
+
+        <h3>Paquete - Equipos</h3>
+        <table>
+            <tr><th>Equipo</th><th>Instrumentos</th></tr>
+            {% if pedido.idPaquete in paquetes_equipos %}
+                {% for equipo in paquetes_equipos[pedido.idPaquete]["equipos"] %}
+                    <tr>
+                        <td>{{ equipo.nombreEquipo }}</td>
+                        <td>
+                            <ul>
+                            {% for instrumento in equipo.instrumentos %}
+                                <li>{{ instrumento.nombreInstrumento }} ({{ instrumento.cantidad }})</li>
+                            {% endfor %}
+                            </ul>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="2">No hay equipos en este paquete</td></tr>
+            {% endif %}
+            <tr>
+                <td colspan="2"><strong>Total de instrumentos en el paquete:</strong> {{ paquetes_equipos.get(pedido.idPaquete, {}).get("total_instrumentos", 0) }}</td>
+            </tr>
+        </table>
+
+        <h3>Paquete - Instrumentos Individuales</h3>
+        <table>
+            <tr><th>Instrumento</th><th>Cantidad</th></tr>
+            {% if pedido.idPaquete in paquetes_instrumentos %}
+                {% for instrumento in paquetes_instrumentos[pedido.idPaquete]["instrumentos"] %}
+                    <tr>
+                        <td>{{ instrumento.nombreInstrumento }}</td>
+                        <td>{{ instrumento.cantidad }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="2">No hay instrumentos en este paquete</td></tr>
+            {% endif %}
+            <tr>
+                <td colspan="2"><strong>Total de instrumentos individuales en el paquete:</strong> {{ paquetes_instrumentos.get(pedido.idPaquete, {}).get("total_instrumentos", 0) }}</td>
+            </tr>
+        </table>
+
+    {% endfor %}
+
+</body>
+</html>

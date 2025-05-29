@@ -466,98 +466,68 @@ def generar_pdf_instrumento():
 
     return io.BytesIO(html_renderizado.encode("utf-8"))
 
-def obtener_datos_equipo():
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT eq.idEquipo, eq.Nombre AS nombreEquipo, 
-                    gi.idInstrumento AS idInstrumentoGrupo, gi.Nombre AS nombreInstrumento, 
-                    gi.CodigoDeBarras,
-                    (SELECT SUM(ei.cantidad) FROM Equipo_Instrumento ei WHERE ei.idEquipo = eq.idEquipo) AS cantidad_total
-                FROM Equipo eq
-                INNER JOIN Equipo_Instrumento ei ON eq.idEquipo = ei.idEquipo
-                INNER JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                ORDER BY eq.idEquipo, gi.idInstrumento ASC;
-
-            """)
-            equipo_instrumentos = cursor.fetchall()
-
-        # Agrupar por idEquipo para mostrar la cantidad total solo al final
-        equipos_por_grupo = {}
-        for item in equipo_instrumentos:
-            id_equipo = item[0]
-            if id_equipo not in equipos_por_grupo:
-                equipos_por_grupo[id_equipo] = {"datos": [], "cantidad_total": item[5], "nombreEquipo": item[1]}
-            equipos_por_grupo[id_equipo]["datos"].append(item[2:5])
-
-        return {
-            "equipos_por_grupo": equipos_por_grupo,
-            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        }
-    except pymysql.Error as e:
-        print(f"Error MySQL: {e}")
-        return None
-    finally:
-        connection.close()
-
-def generar_pdf_equipo():
-    env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("equipo_instrumentos.html")
-
-    datos = obtener_datos_equipo()
-    if not datos:
-        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
-
-    html_renderizado = template.render(datos)
-
-    return io.BytesIO(html_renderizado.encode("utf-8"))
-
 def obtener_datos_paquete():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT p.idPaquete, p.Nombre AS nombrePaquete, p.idEspecialidad, 
-                       e.idEquipo, e.Nombre AS nombreEquipo, 
-                       gi.idInstrumento AS idInstrumentoGrupo, gi.Nombre AS nombreInstrumento, 
-                       gi.CodigoDeBarras AS codigoInstrumento,
-                       gi2.idInstrumento AS idInstrumentoPaquete, gi2.Nombre AS nombreInstrumentoPaquete, 
-                       gi2.CodigoDeBarras AS codigoInstrumentoPaquete,
-                       COALESCE(pi.cantidad, 0) AS cantidad_instrumento_paquete,
-                       COALESCE(ei.cantidad, 0) AS cantidad_instrumento_equipo
+                SELECT p.idPaquete, p.Nombre AS nombrePaquete,
+                    pe.idEquipo, e.Nombre AS nombreEquipo,
+                    ei.idInstrumento AS idInstrumentoEquipo, gi.Nombre AS nombreInstrumentoEquipo, ei.cantidad AS cantidadInstrumentoEquipo
                 FROM Paquete p
                 LEFT JOIN Paquete_Equipo pe ON p.idPaquete = pe.idPaquete
                 LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
                 LEFT JOIN Equipo_Instrumento ei ON e.idEquipo = ei.idEquipo
                 LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                LEFT JOIN Paquete_Instrumento pi ON p.idPaquete = pi.idPaquete
-                LEFT JOIN GInstrumento gi2 ON pi.idInstrumento = gi2.idInstrumento
-                ORDER BY p.idPaquete, e.idEquipo, gi.idInstrumento ASC;
+                ORDER BY p.idPaquete, pe.idEquipo, ei.idInstrumento ASC;
             """)
-            paquete_datos = cursor.fetchall()
+            equipos_datos = cursor.fetchall()
 
-        # Agrupar por idPaquete para mostrar la cantidad total solo al final
+            cursor.execute("""
+                SELECT pi.idPaquete, pi.idInstrumento, gi.Nombre AS nombreInstrumentoPaquete, pi.cantidad AS cantidadInstrumentoPaquete
+                FROM Paquete_Instrumento pi
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY pi.idPaquete, pi.idInstrumento ASC;
+            """)
+            instrumentos_paquete_datos = cursor.fetchall()
+
         paquetes_por_grupo = {}
-        for item in paquete_datos:
+        for item in equipos_datos:
             id_paquete = item[0]
             if id_paquete not in paquetes_por_grupo:
                 paquetes_por_grupo[id_paquete] = {
-                    "datos": [], 
-                    "cantidad_total_instrumentos": 0, 
                     "nombrePaquete": item[1],
-                    "idEspecialidad": item[2]
+                    "equipos": {},
+                    "instrumentos_paquete": [],
                 }
-            paquetes_por_grupo[id_paquete]["datos"].append(item[3:11])
+            id_equipo = item[2]
+            if id_equipo not in paquetes_por_grupo[id_paquete]["equipos"]:
+                paquetes_por_grupo[id_paquete]["equipos"][id_equipo] = {
+                    "nombreEquipo": item[3],
+                    "instrumentos": [],
+                    "total_instrumentos": 0
+                }
+            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["instrumentos"].append({
+                "idInstrumento": item[4],
+                "nombreInstrumento": item[5],
+                "cantidad": item[6]
+            })
+            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["total_instrumentos"] += item[6]
 
-            # Convertir valores a enteros para evitar errores de tipo
-            cantidad_paquete = int(item[10]) if str(item[10]).isdigit() else 0
-            cantidad_equipo = int(item[11]) if str(item[11]).isdigit() else 0
-
-            paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos"] += cantidad_paquete + cantidad_equipo
+        total_instrumentos_paquete = 0
+        for item in instrumentos_paquete_datos:
+            id_paquete = item[0]
+            if id_paquete in paquetes_por_grupo:
+                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append({
+                    "idInstrumento": item[1],
+                    "nombreInstrumento": item[2],
+                    "cantidad": item[3]
+                })
+                total_instrumentos_paquete += item[3]
 
         return {
             "paquetes_por_grupo": paquetes_por_grupo,
+            "total_instrumentos_paquete": total_instrumentos_paquete,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
     except pymysql.Error as e:
@@ -566,30 +536,197 @@ def obtener_datos_paquete():
     finally:
         connection.close()
 
-def generar_pdf_paquete():
+def generar_html_paquete():
     env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("paquete_equipos_instrumentos.html")
+    template = env.get_template("paquete_instrumentos.html")
 
     datos = obtener_datos_paquete()
     if not datos:
         raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
 
     html_renderizado = template.render(datos)
-
     return io.BytesIO(html_renderizado.encode("utf-8"))
 
-@app.get("/getPaqueteEquiposInstrumentos")
+def obtener_datos_pedido():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            # Obtener información del pedido con el nombre del enfermero y paquete asignado
+            cursor.execute("""
+                SELECT p.idPedido, p.Fecha, p.Hora, p.Ubicacion, p.Cirugia, p.Estado,
+                       CONCAT(u.nombres, ' ', u.apellidoPaterno, ' ', u.apellidoMaterno) AS nombreEnfermero,
+                       pa.idPaquete, pa.Nombre AS nombrePaquete
+                FROM Pedido p
+                LEFT JOIN Usuario u ON p.idEnfermero = u.idUsuario
+                LEFT JOIN Paquete pa ON p.idPaquete = pa.idPaquete
+                ORDER BY p.idPedido ASC;
+            """)
+            pedidos_datos = cursor.fetchall()
+
+            # Obtener equipos asignados al pedido
+            cursor.execute("""
+                SELECT pe.idPedido, e.idEquipo, e.Nombre AS nombreEquipo
+                FROM Pedido_Equipo pe
+                LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                ORDER BY pe.idPedido, pe.idEquipo ASC;
+            """)
+            equipos_pedido_datos = cursor.fetchall()
+
+            # Obtener instrumentos dentro de los equipos
+            cursor.execute("""
+                SELECT ei.idEquipo, gi.Nombre AS nombreInstrumento, ei.cantidad
+                FROM Equipo_Instrumento ei
+                LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
+                ORDER BY ei.idEquipo, ei.idInstrumento ASC;
+            """)
+            instrumentos_equipo_datos = cursor.fetchall()
+
+            # Obtener instrumentos grupales del pedido
+            cursor.execute("""
+                SELECT pg.idPedido, gi.Nombre AS nombreInstrumentoGrupo, pg.cantidad
+                FROM Pedido_GInstrumento pg
+                LEFT JOIN GInstrumento gi ON pg.idInstrumento = gi.idInstrumento
+                ORDER BY pg.idPedido, gi.idInstrumento ASC;
+            """)
+            instrumentos_grupo_pedido_datos = cursor.fetchall()
+
+            # Obtener los equipos dentro de los paquetes
+            cursor.execute("""
+                SELECT pa.idPaquete, e.idEquipo, e.Nombre AS nombreEquipo
+                FROM Paquete_Equipo pe
+                LEFT JOIN Paquete pa ON pe.idPaquete = pa.idPaquete
+                LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                ORDER BY pa.idPaquete, e.idEquipo ASC;
+            """)
+            paquetes_equipos_datos = cursor.fetchall()
+
+            # Obtener los instrumentos dentro de los paquetes
+            cursor.execute("""
+                SELECT pa.idPaquete, gi.Nombre AS nombreInstrumento, pi.cantidad
+                FROM Paquete_Instrumento pi
+                LEFT JOIN Paquete pa ON pi.idPaquete = pa.idPaquete
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY pa.idPaquete, gi.idInstrumento ASC;
+            """)
+            paquetes_instrumentos_datos = cursor.fetchall()
+
+        pedidos_por_grupo = {}
+        paquetes_equipos = {}
+        paquetes_instrumentos = {}
+
+        # Organizar pedidos por grupo y calcular totales
+        for item in pedidos_datos:
+            id_pedido = str(item[0])
+            pedidos_por_grupo[id_pedido] = {
+                "fecha": item[1],
+                "hora": item[2],
+                "ubicacion": item[3],
+                "cirugia": item[4],
+                "estado": item[5],
+                "enfermero": item[6],
+                "idPaquete": str(item[7]),
+                "nombrePaquete": item[8],
+                "equipos": [],
+                "instrumentos_grupo": [],
+                "total_instrumentos_equipo": 0,
+                "total_instrumentos_grupo": 0
+            }
+
+        # Organizar equipos asignados al pedido
+        for item in equipos_pedido_datos:
+            id_pedido = str(item[0])
+            id_equipo = str(item[1])
+            pedidos_por_grupo[id_pedido]["equipos"].append({
+                "idEquipo": id_equipo,
+                "nombreEquipo": item[2],
+                "instrumentos": [],
+                "total_instrumentos": 0
+            })
+
+        # Organizar instrumentos dentro de los equipos
+        for item in instrumentos_equipo_datos:
+            id_equipo = str(item[0])
+            for pedido in pedidos_por_grupo.values():
+                for equipo in pedido["equipos"]:
+                    if equipo["idEquipo"] == id_equipo:
+                        equipo["instrumentos"].append({
+                            "nombreInstrumento": item[1],
+                            "cantidad": item[2]
+                        })
+                        equipo["total_instrumentos"] += item[2]
+                        pedido["total_instrumentos_equipo"] += item[2]
+
+        # Organizar instrumentos grupales del pedido
+        for item in instrumentos_grupo_pedido_datos:
+            id_pedido = str(item[0])
+            pedidos_por_grupo[id_pedido]["instrumentos_grupo"].append({
+                "nombreInstrumentoGrupo": item[1],
+                "cantidad": item[2]
+            })
+            pedidos_por_grupo[id_pedido]["total_instrumentos_grupo"] += item[2]
+
+        # Organizar equipos dentro del paquete
+        for item in paquetes_equipos_datos:
+            id_paquete = str(item[0])
+            if id_paquete not in paquetes_equipos:
+                paquetes_equipos[id_paquete] = {"equipos": [], "total_instrumentos": 0}
+            paquetes_equipos[id_paquete]["equipos"].append({
+                "idEquipo": str(item[1]),
+                "nombreEquipo": item[2],
+                "instrumentos": []
+            })
+
+        # Organizar instrumentos dentro de los paquetes
+        for item in paquetes_instrumentos_datos:
+            id_paquete = str(item[0])
+            for equipo in paquetes_equipos.get(id_paquete, {}).get("equipos", []):
+                equipo["instrumentos"].append({
+                    "nombreInstrumento": item[1],
+                    "cantidad": item[2]
+                })
+                paquetes_equipos[id_paquete]["total_instrumentos"] += item[2]
+
+        datos = {
+            "pedidos_por_grupo": pedidos_por_grupo,
+            "paquetes_equipos": paquetes_equipos,
+            "paquetes_instrumentos": paquetes_instrumentos,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+
+        return datos
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+
+
+def generar_html_pedido():
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("pedido_instrumentos.html")
+
+    datos = obtener_datos_pedido()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+
+@app.get("/getPedidoInstrumentos")
+async def descargar_pedido():
+    html_file = generar_html_pedido()
+    return StreamingResponse(html_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Pedido_Instrumentos.html"})
+
+
+
+@app.get("/getPaqueteInstrumentos")
 async def descargar_paquete():
-    pdf_file = generar_pdf_paquete()
-    return StreamingResponse(pdf_file, media_type="text/html",
-                             headers={"Content-Disposition": "inline; filename=Paquete_Equipos_Instrumentos.html"})
-
-
-@app.get("/getEquipoInstrumentos")
-async def descargar_equipo():
-    pdf_file = generar_pdf_equipo()
-    return StreamingResponse(pdf_file, media_type="text/html",
-                             headers={"Content-Disposition": "inline; filename=Equipo_Instrumentos.html"})
+    html_file = generar_html_paquete()
+    return StreamingResponse(html_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Paquete_Instrumentos.html"})
 
 @app.get("/getInstrumento")
 async def descargar_instrumento():
