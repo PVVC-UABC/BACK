@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Instrumentos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tfoot {
+            font-weight: bold;
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Estado de Instrumentos</h2>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    {% for grupo_id, grupo in instrumentos_por_grupo.items() %}
+    <h3>Grupo: {{ grupo_id }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID Instrumento</th>
+                <th>Nombre</th>
+                <th>Código de Barras</th>
+                <th>Estado</th>
+                <th>Ubicación</th>
+                <th>Última Esterilización</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for instrumento in grupo.datos %}
+            <tr>
+                <td>{{ instrumento[0] }}</td>
+                <td>{{ instrumento[1] }}</td>
+                <td>{{ instrumento[2] }}</td>
+                <td>{{ instrumento[3] }}</td>
+                <td>{{ instrumento[4] }}</td>
+                <td>{{ instrumento[5] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5">Cantidad Total en Grupo</td>
+                <td>{{ grupo.cantidad_total }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endfor %}
+</body>
+</html>

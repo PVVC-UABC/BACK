@@ -1,6 +1,5 @@
 import os
 import io
-# import pdfkit
 import pymysql
 import utils
 from fpdf import FPDF
@@ -13,6 +12,8 @@ from hashlib import sha256
 from pydantic import BaseModel
 from datetime import datetime, timedelta, date, time, timedelta, timezone
 from typing import Optional, Union, List, Dict
+from starlette.responses import StreamingResponse
+
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -38,6 +39,7 @@ class Usuario(BaseModel):
     Rol: str
     Correo: str
     Contrasena: Union[str,None] = None
+    Alias: Optional[str] = None 
 
 class login(BaseModel):
     Correo: str
@@ -61,8 +63,23 @@ class GetInstrumentosPorGrupoRequest(BaseModel):
     idInstrumentoGrupo: Union[int, None] = None
     nombreInstrumentoGrupo: Union[str, None] = None
 
+class UpdateIInstrumentoRequest(BaseModel):
+    idInstrumentoIndividual: int
+    nuevoEstado: Union[str, None] = None
+    nuevaUbicacion: Union[str, None] = None
+    nuevaEsterilizacion: Union[datetime, None] = None
+
+class DeleteGInstrumentoRequest(BaseModel):
+    idInstrumento: Union[int, None] = None
+    nombreInstrumento: Union[str, None] = None
+
 class NewEquipo(BaseModel):
     Nombre: str
+
+class UpdatePaqueteRequest(BaseModel):
+    idPaquete: Union[int,None] = None  
+    nombrePaquete: Union[str,None] = None  
+    idEspecialidad: Union[int,None] = None  
 
 class PutEquipo(BaseModel):
     idEquipo: int 
@@ -193,7 +210,6 @@ def obtener_datos_historial_paquetes():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # ✅ Obtener el historial con nombres de paquetes y usuarios
             cursor.execute("""
                 SELECT hp.idHistorialPaquete, p.Nombre AS nombrePaquete, hp.tipoOperacion, 
                        hp.campo, hp.valorAnterior, hp.valorNuevo, hp.observaciones, hp.fechaCambio, 
@@ -205,7 +221,6 @@ def obtener_datos_historial_paquetes():
             """)
             historial_paquetes = cursor.fetchall()
 
-            # ✅ Obtener los nombres de los equipos directamente desde la tabla `Equipo`
             cursor.execute("""
                 SELECT e.idEquipo, e.Nombre AS nombreEquipo
                 FROM Equipo e;
@@ -332,7 +347,6 @@ def obtener_datos_historial_ginstrumento():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # ✅ Obtener historial con nombres de instrumentos y usuarios
             cursor.execute("""
                 SELECT hg.idHistorial, gi.Nombre AS nombreInstrumento, 
                        hg.observaciones, hg.fechaCambio, 
@@ -403,6 +417,322 @@ def generar_pdf_historial_iinstrumento():
     html_renderizado = template.render(datos)
 
     return io.BytesIO(html_renderizado.encode("utf-8"))
+
+def obtener_datos_instrumento():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT ii.idInstrumentoIndividual, 
+                       gi.Nombre AS nombreHerramienta, 
+                       gi.CodigoDeBarras, 
+                       ii.Estado, ii.Ubicacion, 
+                       ii.ultimaEsterilizacion,
+                       gi.idInstrumento,
+                       (SELECT COUNT(*) FROM IInstrumento WHERE idInstrumentoGrupo = gi.idInstrumento) AS cantidad_total
+                FROM IInstrumento ii
+                LEFT JOIN GInstrumento gi ON ii.idInstrumentoGrupo = gi.idInstrumento
+                ORDER BY gi.idInstrumento, ii.idInstrumentoIndividual ASC;
+            """)
+            instrumento = cursor.fetchall()
+
+        # Agrupar por idInstrumentoGrupo para mostrar la cantidad total solo al final
+        instrumentos_por_grupo = {}
+        for item in instrumento:
+            id_grupo = item[6]
+            if id_grupo not in instrumentos_por_grupo:
+                instrumentos_por_grupo[id_grupo] = {"datos": [], "cantidad_total": item[7]}
+            instrumentos_por_grupo[id_grupo]["datos"].append(item[:6])
+
+        return {
+            "instrumentos_por_grupo": instrumentos_por_grupo,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_pdf_instrumento():
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("instrumento.html")
+
+    datos = obtener_datos_instrumento()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+def obtener_datos_paquete():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT p.idPaquete, p.Nombre AS nombrePaquete,
+                    pe.idEquipo, e.Nombre AS nombreEquipo,
+                    ei.idInstrumento AS idInstrumentoEquipo, gi.Nombre AS nombreInstrumentoEquipo, ei.cantidad AS cantidadInstrumentoEquipo
+                FROM Paquete p
+                LEFT JOIN Paquete_Equipo pe ON p.idPaquete = pe.idPaquete
+                LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                LEFT JOIN Equipo_Instrumento ei ON e.idEquipo = ei.idEquipo
+                LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
+                ORDER BY p.idPaquete, pe.idEquipo, ei.idInstrumento ASC;
+            """)
+            equipos_datos = cursor.fetchall()
+
+            cursor.execute("""
+                SELECT pi.idPaquete, pi.idInstrumento, gi.Nombre AS nombreInstrumentoPaquete, pi.cantidad AS cantidadInstrumentoPaquete
+                FROM Paquete_Instrumento pi
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY pi.idPaquete, pi.idInstrumento ASC;
+            """)
+            instrumentos_paquete_datos = cursor.fetchall()
+
+        paquetes_por_grupo = {}
+        for item in equipos_datos:
+            id_paquete = item[0]
+            if id_paquete not in paquetes_por_grupo:
+                paquetes_por_grupo[id_paquete] = {
+                    "nombrePaquete": item[1],
+                    "equipos": {},
+                    "instrumentos_paquete": [],
+                }
+            id_equipo = item[2]
+            if id_equipo not in paquetes_por_grupo[id_paquete]["equipos"]:
+                paquetes_por_grupo[id_paquete]["equipos"][id_equipo] = {
+                    "nombreEquipo": item[3],
+                    "instrumentos": [],
+                    "total_instrumentos": 0
+                }
+            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["instrumentos"].append({
+                "idInstrumento": item[4],
+                "nombreInstrumento": item[5],
+                "cantidad": item[6]
+            })
+            paquetes_por_grupo[id_paquete]["equipos"][id_equipo]["total_instrumentos"] += item[6]
+
+        total_instrumentos_paquete = 0
+        for item in instrumentos_paquete_datos:
+            id_paquete = item[0]
+            if id_paquete in paquetes_por_grupo:
+                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append({
+                    "idInstrumento": item[1],
+                    "nombreInstrumento": item[2],
+                    "cantidad": item[3]
+                })
+                total_instrumentos_paquete += item[3]
+
+        return {
+            "paquetes_por_grupo": paquetes_por_grupo,
+            "total_instrumentos_paquete": total_instrumentos_paquete,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_html_paquete():
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("paquete_instrumentos.html")
+
+    datos = obtener_datos_paquete()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+def obtener_datos_pedido():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            # Obtener información del pedido con el nombre del enfermero y paquete asignado
+            cursor.execute("""
+                SELECT p.idPedido, p.Fecha, p.Hora, p.Ubicacion, p.Cirugia, p.Estado,
+                       CONCAT(u.nombres, ' ', u.apellidoPaterno, ' ', u.apellidoMaterno) AS nombreEnfermero,
+                       pa.idPaquete, pa.Nombre AS nombrePaquete
+                FROM Pedido p
+                LEFT JOIN Usuario u ON p.idEnfermero = u.idUsuario
+                LEFT JOIN Paquete pa ON p.idPaquete = pa.idPaquete
+                ORDER BY p.idPedido ASC;
+            """)
+            pedidos_datos = cursor.fetchall()
+
+            # Obtener equipos asignados al pedido
+            cursor.execute("""
+                SELECT pe.idPedido, e.idEquipo, e.Nombre AS nombreEquipo
+                FROM Pedido_Equipo pe
+                LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                ORDER BY pe.idPedido, pe.idEquipo ASC;
+            """)
+            equipos_pedido_datos = cursor.fetchall()
+
+            # Obtener instrumentos dentro de los equipos
+            cursor.execute("""
+                SELECT ei.idEquipo, gi.Nombre AS nombreInstrumento, ei.cantidad
+                FROM Equipo_Instrumento ei
+                LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
+                ORDER BY ei.idEquipo, ei.idInstrumento ASC;
+            """)
+            instrumentos_equipo_datos = cursor.fetchall()
+
+            # Obtener instrumentos grupales del pedido
+            cursor.execute("""
+                SELECT pg.idPedido, gi.Nombre AS nombreInstrumentoGrupo, pg.cantidad
+                FROM Pedido_GInstrumento pg
+                LEFT JOIN GInstrumento gi ON pg.idInstrumento = gi.idInstrumento
+                ORDER BY pg.idPedido, gi.idInstrumento ASC;
+            """)
+            instrumentos_grupo_pedido_datos = cursor.fetchall()
+
+            # Obtener los equipos dentro de los paquetes
+            cursor.execute("""
+                SELECT pa.idPaquete, e.idEquipo, e.Nombre AS nombreEquipo
+                FROM Paquete_Equipo pe
+                LEFT JOIN Paquete pa ON pe.idPaquete = pa.idPaquete
+                LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                ORDER BY pa.idPaquete, e.idEquipo ASC;
+            """)
+            paquetes_equipos_datos = cursor.fetchall()
+
+            # Obtener los instrumentos dentro de los paquetes
+            cursor.execute("""
+                SELECT pa.idPaquete, gi.Nombre AS nombreInstrumento, pi.cantidad
+                FROM Paquete_Instrumento pi
+                LEFT JOIN Paquete pa ON pi.idPaquete = pa.idPaquete
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY pa.idPaquete, gi.idInstrumento ASC;
+            """)
+            paquetes_instrumentos_datos = cursor.fetchall()
+
+        pedidos_por_grupo = {}
+        paquetes_equipos = {}
+        paquetes_instrumentos = {}
+
+        # Organizar pedidos por grupo y calcular totales
+        for item in pedidos_datos:
+            id_pedido = str(item[0])
+            pedidos_por_grupo[id_pedido] = {
+                "fecha": item[1],
+                "hora": item[2],
+                "ubicacion": item[3],
+                "cirugia": item[4],
+                "estado": item[5],
+                "enfermero": item[6],
+                "idPaquete": str(item[7]),
+                "nombrePaquete": item[8],
+                "equipos": [],
+                "instrumentos_grupo": [],
+                "total_instrumentos_equipo": 0,
+                "total_instrumentos_grupo": 0
+            }
+
+        # Organizar equipos asignados al pedido
+        for item in equipos_pedido_datos:
+            id_pedido = str(item[0])
+            id_equipo = str(item[1])
+            pedidos_por_grupo[id_pedido]["equipos"].append({
+                "idEquipo": id_equipo,
+                "nombreEquipo": item[2],
+                "instrumentos": [],
+                "total_instrumentos": 0
+            })
+
+        # Organizar instrumentos dentro de los equipos
+        for item in instrumentos_equipo_datos:
+            id_equipo = str(item[0])
+            for pedido in pedidos_por_grupo.values():
+                for equipo in pedido["equipos"]:
+                    if equipo["idEquipo"] == id_equipo:
+                        equipo["instrumentos"].append({
+                            "nombreInstrumento": item[1],
+                            "cantidad": item[2]
+                        })
+                        equipo["total_instrumentos"] += item[2]
+                        pedido["total_instrumentos_equipo"] += item[2]
+
+        # Organizar instrumentos grupales del pedido
+        for item in instrumentos_grupo_pedido_datos:
+            id_pedido = str(item[0])
+            pedidos_por_grupo[id_pedido]["instrumentos_grupo"].append({
+                "nombreInstrumentoGrupo": item[1],
+                "cantidad": item[2]
+            })
+            pedidos_por_grupo[id_pedido]["total_instrumentos_grupo"] += item[2]
+
+        # Organizar equipos dentro del paquete
+        for item in paquetes_equipos_datos:
+            id_paquete = str(item[0])
+            if id_paquete not in paquetes_equipos:
+                paquetes_equipos[id_paquete] = {"equipos": [], "total_instrumentos": 0}
+            paquetes_equipos[id_paquete]["equipos"].append({
+                "idEquipo": str(item[1]),
+                "nombreEquipo": item[2],
+                "instrumentos": []
+            })
+
+        # Organizar instrumentos dentro de los paquetes
+        for item in paquetes_instrumentos_datos:
+            id_paquete = str(item[0])
+            for equipo in paquetes_equipos.get(id_paquete, {}).get("equipos", []):
+                equipo["instrumentos"].append({
+                    "nombreInstrumento": item[1],
+                    "cantidad": item[2]
+                })
+                paquetes_equipos[id_paquete]["total_instrumentos"] += item[2]
+
+        datos = {
+            "pedidos_por_grupo": pedidos_por_grupo,
+            "paquetes_equipos": paquetes_equipos,
+            "paquetes_instrumentos": paquetes_instrumentos,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+
+        return datos
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+
+
+def generar_html_pedido():
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("pedido_instrumentos.html")
+
+    datos = obtener_datos_pedido()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+
+@app.get("/getPedidoInstrumentos")
+async def descargar_pedido():
+    html_file = generar_html_pedido()
+    return StreamingResponse(html_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Pedido_Instrumentos.html"})
+
+
+
+@app.get("/getPaqueteInstrumentos")
+async def descargar_paquete():
+    html_file = generar_html_paquete()
+    return StreamingResponse(html_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Paquete_Instrumentos.html"})
+
+@app.get("/getInstrumento")
+async def descargar_instrumento():
+    pdf_file = generar_pdf_instrumento()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Instrumento.html"})
 
 @app.get("/getHistorialIInstrumento")
 async def descargar_historial_iinstrumento():
@@ -576,45 +906,6 @@ async def root(response: Response):
     except Exception as e:
         error = "Error: " + str(e)
         return error
-
-@app.get("/getEquipos")
-async def root(response: Response):
-    try:
-        connection = utils.get_connection()
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM Equipo")
-            result = cursor.fetchall()
-            if not result:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return {"message": "No se encontraron datos"}
-            return JSONResponse(
-                content=utils.tokenize(result, cursor.description),
-                media_type="application/json",
-                status_code=status.HTTP_200_OK
-            )
-
-    except Exception as e:
-        error = "Error: " + str(e)
-        return error
-    
-@app.get("/getEquipo/{index}")
-async def root(index : int, response: Response):
-    try:
-        connection = utils.get_connection()
-
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM Equipo WHERE idEquipo = %s", (index))
-            result = cursor.fetchall()
-            if not result:
-                return JSONResponse(content={"message": "No se encontraron datos"}, media_type="application/json", status_code=status.HTTP_404_NOT_FOUND)
-            return JSONResponse(
-                content=utils.tokenize(result, cursor.description),
-                media_type="application/json",
-                status_code=status.HTTP_200_OK
-            )   
-    except Exception as e:
-        error = "Error: " + str(e)
-        return error
     
 
 @app.post("/postUsuario")
@@ -627,9 +918,13 @@ async def crear_usuario(usuario: Usuario, response: Response):
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             hashed_password = sha256(usuario.Contrasena.encode()).hexdigest()
+
+            # Si el alias no se proporciona, se asigna el rol por defecto
+            alias_final = usuario.Alias if usuario.Alias else usuario.Rol
+
             cursor.execute(
-                "INSERT INTO Usuario (Nombres, ApellidoPaterno, ApellidoMaterno, Rol, Correo, Contrasena) VALUES (%s, %s, %s, %s, %s, %s)",
-                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, hashed_password)
+                "INSERT INTO Usuario (Nombres, ApellidoPaterno, ApellidoMaterno, Rol, Correo, Contrasena, Alias) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno, usuario.Rol, usuario.Correo, hashed_password, alias_final)
             )
             connection.commit()
             return {"message": "Usuario insertado correctamente"}
@@ -639,39 +934,34 @@ async def crear_usuario(usuario: Usuario, response: Response):
         return {"error": str(e)}
     finally:
         connection.close()
-        
+
 @app.put("/updateUsuario/{index}")
-async def root(index: int, response: Response, usuario: Usuario):
-    # payload = utils.verify_token(token)
-    # if payload["rol"] != "Administrador":
-    #     response.status_code = status.HTTP_403_FORBIDDEN
-    #     return {"message": "No tienes permiso para acceder a esta ruta"}
+async def actualizar_usuario(index: int, usuario: Usuario, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            contrasena = 0
-            cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index))
-            result = cursor.fetchall()
+            cursor.execute("SELECT * FROM Usuario WHERE idUsuario = %s", (index,))
+            result = cursor.fetchone()
             if not result:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "No existe el usuario"}
-            if usuario.Contrasena == "":
-                contrasena = result[0][6]
-            else:
-                contrasena = sha256(usuario.Contrasena.encode()).hexdigest()
+
+            # Si la contraseña no se proporciona, se mantiene la actual
+            contrasena_final = result[5] if not usuario.Contrasena else sha256(usuario.Contrasena.encode()).hexdigest()
+
+            # Si el alias no se proporciona o está vacío, usa el rol del usuario en lugar del correo
+            alias_final = usuario.Alias if usuario.Alias and usuario.Alias.strip() else usuario.Rol
+
             cursor.execute(
-                "UPDATE Usuario SET Nombres = %s, ApellidoPaterno = %s, ApellidoMaterno = %s, Rol = %s, Correo = %s, Contrasena = %s WHERE idUsuario = %s",
-                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno , usuario.Rol, usuario.Correo, contrasena, index)
+                "UPDATE Usuario SET Nombres = %s, ApellidoPaterno = %s, ApellidoMaterno = %s, Rol = %s, Correo = %s, Contrasena = %s, Alias = %s WHERE idUsuario = %s",
+                (usuario.Nombres, usuario.ApellidoPaterno, usuario.ApellidoMaterno, usuario.Rol, usuario.Correo, contrasena_final, alias_final, index)
             )
             connection.commit()
-            return JSONResponse(
-                content={"message": "Usuario actualizado correctamente"},
-                media_type="application/json",
-                status_code=status.HTTP_200_OK
-            )
+            return {"message": "Usuario actualizado correctamente"}
+
     except Exception as e:
-        error = "Error: " + str(e)
-        return error
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
     finally:
         connection.close()
 
@@ -1144,6 +1434,107 @@ async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Res
     finally:
         connection.close()
 
+@app.delete("/deleteGInstrumento")
+async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            if data.idInstrumento:
+                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
+                grupo = cursor.fetchone()
+            elif data.nombreInstrumento:
+                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (data.nombreInstrumento,))
+                grupo = cursor.fetchone()
+            else:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Debe proporcionar un idInstrumento o un nombreInstrumento"}
+
+            if not grupo:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Grupo de instrumentos no encontrado"}
+
+            idInstrumento = grupo[0]
+
+            cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoGrupo = %s", (idInstrumento,))
+
+            cursor.execute("DELETE FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+            cursor.execute("DELETE FROM Paquete_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+            cursor.execute("DELETE FROM Pedido_GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+
+            cursor.execute("DELETE FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+
+            connection.commit()
+            return {"message": "Grupo de instrumentos eliminado correctamente junto con sus instrumentos asociados"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+
+@app.put("/updateIInstrumento")
+async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            # Validar si el instrumento existe
+            cursor.execute("SELECT idInstrumentoIndividual FROM IInstrumento WHERE idInstrumentoIndividual = %s", (data.idInstrumentoIndividual,))
+            instrumento = cursor.fetchone()
+
+            if not instrumento:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                return {"message": "Instrumento no encontrado"}
+
+            # Construir la consulta de actualización dinámicamente
+            campos_actualizar = []
+            valores = []
+
+            if data.nuevoEstado:
+                estados_validos = ["Disponible", "En uso", "Dañado", "Esterilizado"]
+                if data.nuevoEstado not in estados_validos:
+                    response.status_code = status.HTTP_400_BAD_REQUEST
+                    return {"message": "Estado inválido. Debe ser uno de: Disponible, En uso, Dañado, Esterilizado"}
+                campos_actualizar.append("Estado = %s")
+                valores.append(data.nuevoEstado)
+
+            if data.nuevaUbicacion:
+                campos_actualizar.append("Ubicacion = %s")
+                valores.append(data.nuevaUbicacion)
+
+            if data.nuevaEsterilizacion:
+                if isinstance(data.nuevaEsterilizacion, datetime):
+                    fecha_hora_esterilizacion = data.nuevaEsterilizacion
+                else:
+                    try:
+                        fecha_hora_esterilizacion = datetime.strptime(data.nuevaEsterilizacion, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        response.status_code = status.HTTP_400_BAD_REQUEST
+                        return {"message": "Formato de fecha/hora inválido. Debe ser YYYY-MM-DD HH:MM:SS"}
+                campos_actualizar.append("ultimaEsterilizacion = %s")
+                valores.append(fecha_hora_esterilizacion)
+
+            if not campos_actualizar:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Debe proporcionar al menos un campo para actualizar"}
+
+            valores.append(data.idInstrumentoIndividual)
+            consulta_sql = f"UPDATE IInstrumento SET {', '.join(campos_actualizar)} WHERE idInstrumentoIndividual = %s"
+            cursor.execute(consulta_sql, valores)
+
+            connection.commit()
+            return {"message": "Instrumento actualizado correctamente"}
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"error": str(e)}
+
+    finally:
+        connection.close()
+
+
+
 @app.post("/postEquipo")
 async def crear_equipo(equipo: NewEquipo, response: Response):
     try:
@@ -1268,7 +1659,6 @@ async def obtener_todos_los_equipos(response: Response):
     finally:
         connection.close()
 
-
 @app.delete("/deleteEquipo")
 async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
@@ -1312,12 +1702,7 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar que el equipo exista
             cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
             equipo_existente = cursor.fetchone()
             if not equipo_existente:
@@ -1325,22 +1710,14 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
                 return {"message": "Equipo no encontrado"}
 
             for herramienta in data.herramientas:
-                idInstrumento = herramienta.get("idInstrumento")
-                nombreInstrumento = herramienta.get("nombreInstrumento")
+                idInstrumento = herramienta["idInstrumento"]
                 cantidad = herramienta["cantidad"]
 
                 if cantidad <= 0:  
                     response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No se puede agregar o modificar un instrumento con cantidad {cantidad}"}
+                    return {"message": f"No se puede agregar un instrumento con cantidad {cantidad}"}
 
-                if nombreInstrumento:
-                    cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
-                    instrumento_data = cursor.fetchone()
-                    if not instrumento_data:
-                        response.status_code = status.HTTP_404_NOT_FOUND
-                        return {"message": f"Instrumento con nombre '{nombreInstrumento}' no encontrado"}
-                    idInstrumento = instrumento_data[0]
-
+                # Obtener cantidad total disponible en inventario
                 cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
                 instrumento_existente = cursor.fetchone()
                 if not instrumento_existente:
@@ -1349,19 +1726,25 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
 
                 cantidad_disponible = instrumento_existente[0]
 
-                if cantidad_disponible <= 0:  
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No hay unidades disponibles del instrumento con id {idInstrumento}, no se puede agregar"}
+                # Obtener cantidad ya asignada a otros equipos
+                cursor.execute("SELECT SUM(cantidad) FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
+                cantidad_asignada = cursor.fetchone()[0] or 0
 
-                cantidad_final = min(cantidad, cantidad_disponible)
+                # Validar si hay suficiente inventario disponible
+                cantidad_restante = cantidad_disponible - cantidad_asignada
+                if cantidad > cantidad_restante:
+                    response.status_code = status.HTTP_400_BAD_REQUEST
+                    return {"message": f"No hay suficientes unidades disponibles del instrumento {idInstrumento}. Quedan {cantidad_restante} disponibles."}
+
+                # Insertar o actualizar la cantidad en el equipo
                 cursor.execute("""
                     INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
                     VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE cantidad = %s
-                """, (data.idEquipo, idInstrumento, cantidad_final, cantidad_final))
+                """, (data.idEquipo, idInstrumento, cantidad, cantidad))
 
             connection.commit()
-            return {"message": "Cantidad de herramientas modificada o agregada correctamente"}
+            return {"message": "Cantidad de herramientas modificada correctamente"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR

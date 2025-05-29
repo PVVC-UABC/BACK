@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Equipos e Instrumentos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tfoot {
+            font-weight: bold;
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Estado de Equipos </h2>
+    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+
+    {% for equipo_id, equipo in equipos_por_grupo.items() %}
+    <h3>Equipo: {{ equipo.nombreEquipo }} (ID: {{ equipo_id }})</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID Instrumento Grupo</th>
+                <th>Nombre Instrumento</th>
+                <th>Código de Barras</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for instrumento in equipo.datos %}
+            <tr>
+                <td>{{ instrumento[0] }}</td>
+                <td>{{ instrumento[1] }}</td>
+                <td>{{ instrumento[2] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="2">Cantidad Total de Instrumentos en Equipo</td>
+                <td>{{ equipo.cantidad_total }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endfor %}
+</body>
+</html>
