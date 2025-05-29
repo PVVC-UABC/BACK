@@ -30,7 +30,7 @@
     </style>
 </head>
 <body>
-    <h2>Estado de Equipos </h2>
+    <h2>Estado de Equipos</h2>
     <p>Fecha del reporte: {{ fecha_reporte }}</p>
 
     {% for equipo_id, equipo in equipos_por_grupo.items() %}
@@ -41,21 +41,23 @@
                 <th>ID Instrumento Grupo</th>
                 <th>Nombre Instrumento</th>
                 <th>Código de Barras</th>
+                <th>Cantidad</th>
             </tr>
         </thead>
         <tbody>
             {% for instrumento in equipo.datos %}
             <tr>
-                <td>{{ instrumento[0] }}</td>
-                <td>{{ instrumento[1] }}</td>
-                <td>{{ instrumento[2] }}</td>
+                <td>{{ instrumento.idInstrumentoGrupo }}</td>
+                <td>{{ instrumento.nombreInstrumento }}</td>
+                <td>{{ instrumento.codigoBarras }}</td>
+                <td>{{ instrumento.cantidadInstrumento }}</td>
             </tr>
             {% endfor %}
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="2">Cantidad Total de Instrumentos en Equipo</td>
-                <td>{{ equipo.cantidad_total }}</td>
+                <td colspan="3">Cantidad Total de Instrumentos en Equipo</td>
+                <td>{{ equipo.cantidad_total_equipo }}</td>
             </tr>
         </tfoot>
     </table>

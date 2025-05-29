@@ -109,7 +109,6 @@ class Paquete(BaseModel):
 class PostPaqueteRequest(BaseModel):
     Nombre: str
     idEspecialidad: int
-    equipos: List[Dict] 
 
 class GetPaquetePorEspecialidadRequest(BaseModel):
     idEspecialidad: Union[int, None] = None
@@ -700,8 +699,6 @@ def obtener_datos_pedido():
     finally:
         connection.close()
 
-
-
 def generar_html_pedido():
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("pedido_instrumentos.html")
@@ -713,14 +710,74 @@ def generar_html_pedido():
     html_renderizado = template.render(datos)
     return io.BytesIO(html_renderizado.encode("utf-8"))
 
+def obtener_datos_equipo():
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT eq.idEquipo, eq.Nombre AS nombreEquipo, 
+                    gi.idInstrumento AS idInstrumentoGrupo, gi.Nombre AS nombreInstrumento, 
+                    gi.CodigoDeBarras, ei.cantidad AS cantidadInstrumento
+                FROM Equipo eq
+                INNER JOIN Equipo_Instrumento ei ON eq.idEquipo = ei.idEquipo
+                INNER JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
+                ORDER BY eq.idEquipo, gi.idInstrumento ASC;
+            """)
+            equipo_instrumentos = cursor.fetchall()
+
+        # Agrupar por idEquipo para mostrar la cantidad total por instrumento
+        equipos_por_grupo = {}
+        for item in equipo_instrumentos:
+            id_equipo = item[0]
+            if id_equipo not in equipos_por_grupo:
+                equipos_por_grupo[id_equipo] = {
+                    "nombreEquipo": item[1],
+                    "datos": [],
+                    "cantidad_total_equipo": 0
+                }
+            equipos_por_grupo[id_equipo]["datos"].append({
+                "idInstrumentoGrupo": item[2],
+                "nombreInstrumento": item[3],
+                "codigoBarras": item[4],
+                "cantidadInstrumento": item[5]
+            })
+            equipos_por_grupo[id_equipo]["cantidad_total_equipo"] += item[5]  # Sumar cantidad total de instrumentos en el equipo
+
+        datos = {
+            "equipos_por_grupo": equipos_por_grupo,
+            "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        }
+
+        return datos
+    except pymysql.Error as e:
+        print(f"Error MySQL: {e}")
+        return None
+    finally:
+        connection.close()
+
+def generar_pdf_equipo():
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("equipo_instrumentos.html")
+
+    datos = obtener_datos_equipo()
+    if not datos:
+        raise HTTPException(status_code=500, detail="No se obtuvieron datos de la base de datos")
+
+    html_renderizado = template.render(datos)
+
+    return io.BytesIO(html_renderizado.encode("utf-8"))
+
+@app.get("/getEquipoInstrumentos")
+async def descargar_equipo():
+    html_file = generar_pdf_equipo()
+    return StreamingResponse(html_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Equipo_Instrumentos.html"})
 
 @app.get("/getPedidoInstrumentos")
 async def descargar_pedido():
     html_file = generar_html_pedido()
     return StreamingResponse(html_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Pedido_Instrumentos.html"})
-
-
 
 @app.get("/getPaqueteInstrumentos")
 async def descargar_paquete():
@@ -754,8 +811,9 @@ async def descargar_historial_equipos():
 
 @app.get("/getHistorialPedido")
 async def descargar_historial_pedido():
-    html_content = generar_html_historial_pedido()
-    return HTMLResponse(content=html_content)
+    pdf_file = generar_html_historial_pedido()
+    return StreamingResponse(pdf_file, media_type="text/html",
+                             headers={"Content-Disposition": "inline; filename=Historial_Paquetes.html"})
 
 @app.get("/getHistorialPaquetes")
 async def descargar_historial_paquetes():
@@ -1778,53 +1836,29 @@ async def crear_paquete(data: PostPaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
 
+            # Validar que la especialidad existe
             cursor.execute("SELECT idEspecialidad FROM Especialidad WHERE idEspecialidad = %s", (data.idEspecialidad,))
-            especialidad_existente = cursor.fetchone()
-            if not especialidad_existente:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return {"message": "Especialidad no encontrada"}
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Especialidad no encontrada")
 
+            # Validar que el nombre del paquete no esté vacío
+            if not data.Nombre or data.Nombre.strip() == "":
+                raise HTTPException(status_code=400, detail="El nombre del paquete no puede estar vacío")
+
+            # Insertar el paquete en la tabla
             cursor.execute("INSERT INTO Paquete (Nombre, idEspecialidad) VALUES (%s, %s)", 
                            (data.Nombre, data.idEspecialidad))
             paquete_id = cursor.lastrowid  
 
-            equipos_asociados = []
-            for equipo in data.equipos:
-                idEquipo = equipo.get("idEquipo")
-                nombreEquipo = equipo.get("nombreEquipo")
-
-                if idEquipo:
-                    cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (idEquipo,))
-                    equipo_existente = cursor.fetchone()
-                    if not equipo_existente:
-                        response.status_code = status.HTTP_404_NOT_FOUND
-                        return {"message": f"Equipo con id {idEquipo} no encontrado"}
-                elif nombreEquipo:
-                    cursor.execute("SELECT idEquipo FROM Equipo WHERE Nombre = %s", (nombreEquipo,))
-                    equipo_data = cursor.fetchone()
-                    if not equipo_data:
-                        response.status_code = status.HTTP_404_NOT_FOUND
-                        return {"message": f"Equipo con nombre '{nombreEquipo}' no encontrado"}
-                    idEquipo = equipo_data[0]
-                else:
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": "Cada equipo debe tener un idEquipo o un nombreEquipo"}
-
-                cursor.execute("INSERT INTO Paquete_Equipo (idPaquete, idEquipo) VALUES (%s, %s)", (paquete_id, idEquipo))
-                equipos_asociados.append(idEquipo)
-
             connection.commit()
-            return {"message": "Paquete registrado correctamente", "idPaquete": paquete_id, "equiposAsociados": equipos_asociados}
+            return {"message": "Paquete registrado correctamente"}
+
+    except pymysql.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error MySQL: {e}")
 
     except Exception as e:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {e}")
 
     finally:
         connection.close()
@@ -2136,38 +2170,60 @@ async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
+            # Verificar que el paquete existe
             cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
             paquete_existente = cursor.fetchone()
             if not paquete_existente:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "Paquete no encontrado"}
 
+            equipos_agregados = []
+            equipos_duplicados = []
+
             for idEquipo in data.equipos:
+                # Verificar que el equipo existe
                 cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (idEquipo,))
                 equipo_existente = cursor.fetchone()
                 if not equipo_existente:
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": f"Equipo con id {idEquipo} no encontrado"}
 
-                cursor.execute("""
-                    INSERT INTO Paquete_Equipo (idPaquete, idEquipo)
-                    VALUES (%s, %s)
-                """, (data.idPaquete, idEquipo))
+                # Verificar si el equipo ya está en el paquete
+                cursor.execute("SELECT idPaquete FROM Paquete_Equipo WHERE idPaquete = %s AND idEquipo = %s", 
+                               (data.idPaquete, idEquipo))
+                equipo_asociado = cursor.fetchone()
+
+                if equipo_asociado:
+                    equipos_duplicados.append(idEquipo)
+                else:
+                    # Insertar el equipo si no está registrado aún en el paquete
+                    cursor.execute("""
+                        INSERT INTO Paquete_Equipo (idPaquete, idEquipo)
+                        VALUES (%s, %s)
+                    """, (data.idPaquete, idEquipo))
+                    equipos_agregados.append(idEquipo)
 
             connection.commit()
-            return {"message": "Equipos agregados correctamente al paquete"}
-    
+
+            mensajes = []
+            if equipos_duplicados:
+                mensajes.append({
+                    "message": f"Estos equipos ya estaban en el paquete y no se agregaron nuevamente: {equipos_duplicados}"
+                })
+            if equipos_agregados:
+                mensajes.append({
+                    "message": f"Equipos agregados correctamente al paquete: {equipos_agregados}"
+                })
+
+            return mensajes
+
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return {"error": str(e)}
-    
+
     finally:
         connection.close()
+
 
 @app.delete("/deletePaqueteEquipo")
 async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response):
