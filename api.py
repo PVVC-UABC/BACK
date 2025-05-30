@@ -14,12 +14,7 @@ from datetime import datetime, timedelta, date, time, timedelta, timezone
 from typing import Optional, Union, List, Dict
 from starlette.responses import StreamingResponse
 
-
-
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
 
 app = FastAPI()
 
@@ -769,6 +764,98 @@ async def descargar_pedido():
     html_file = generar_html_pedido()
     return StreamingResponse(html_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Pedido_Instrumentos.html"})
+    
+@app.get("/getPedidoInstrumentoss/{index}")
+async def get_pedido_instrumentos(index: int):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT idInstrumento FROM Pedido_IInstrumento WHERE idPedido = %s", (index,))
+            instrumentos = cursor.fetchall()
+            if not instrumentos:
+                raise HTTPException(status_code=404, detail="No se encontraron instrumentos para este pedido")
+            instrumentos_list = [instrumento[0] for instrumento in instrumentos]
+            return JSONResponse(
+                content={"instrumentos": instrumentos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener los instrumentos del pedido")
+    
+@app.get("/getIinstrumento/{index}")
+async def get_iinstrumento(index: int):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT idInstrumentoIndividual, Estado, Ubicacion, idInstrumentoGrupo, idEquipo, idPaquete FROM IInstrumento WHERE idInstrumentoIndividual = %s", (index,))
+            instrumentos = cursor.fetchall()
+            if not instrumentos:
+                raise HTTPException(status_code=404, detail="No se encontraron instrumentos individuales para este grupo")
+            instrumentos_dict = utils.tokenize(instrumentos,cursor.description)
+            return JSONResponse(
+                content={"instrumento": instrumentos_dict},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener los instrumentos individuales del grupo")
+    finally:
+        connection.close()
+        
+@app.get("/getPedidoEquipo/{index}")
+async def get_pedido_Equipos(index: int, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT idEquipo FROM Pedido_Equipo WHERE idPedido = %s", (index,))
+            Equipos = cursor.fetchall()
+            if not Equipos:
+                return JSONResponse(
+                    content={"message": "No se encontraron equipos para este pedido"},
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            equipos_list = utils.tokenize(Equipos, cursor.description)
+            return JSONResponse(
+                content={"Equipos": equipos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(
+            content={"message": "Error al obtener los equipos del pedido"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
+        
+@app.get("/getEquipoInstrumentos/{index}")
+async def get_equipo_instrumentos(index: int, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM Equipo_Instrumento WHERE idEquipo = %s", (index,))
+            instrumentos = cursor.fetchall()
+            if not instrumentos:
+                return JSONResponse(
+                    content={"message": "No se encontraron instrumentos para este equipo"},
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            instrumentos_list = utils.tokenize(instrumentos, cursor.description)
+            return JSONResponse(
+                content={"instrumentos": instrumentos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(
+            content={"message": "Error al obtener los instrumentos del equipo"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
 
 @app.get("/getPaqueteEquiposInstrumentos")
 async def descargar_paquete():
@@ -2620,7 +2707,7 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
                 cantidad_en_equipos = cursor.fetchone()[0]
 
                 cursor.execute("""
-                    SELECT COALESCE(SUM(cantidad), 0) FROM Pedido_GInstrumento WHERE idInstrumento = %s
+                    SELECT COALESCE(SUM(cantidad), 0) FROM Pedido_IInstrumento WHERE idInstrumento = %s
                 """, (idInstrumento,))
                 cantidad_en_pedidos = cursor.fetchone()[0]
 
@@ -2631,7 +2718,7 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
                     return {"message": f"La cantidad requerida ({cantidad}) excede la disponibilidad ({cantidad_disponible - cantidad_total_usada}) en el almacén"}
 
                 cursor.execute("""
-                    INSERT INTO Pedido_GInstrumento (idPedido, idInstrumento, cantidad)
+                    INSERT INTO Pedido_IInstrumento (idPedido, idInstrumento, cantidad)
                     VALUES (%s, %s, %s)
                 """, (data.idPedido, idInstrumento, cantidad))
 
