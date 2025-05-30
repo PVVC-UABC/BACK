@@ -2,7 +2,6 @@ import os
 import io
 import pymysql
 import utils
-from fpdf import FPDF
 from jinja2 import Environment, FileSystemLoader
 from fastapi import FastAPI, Response, status, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
@@ -268,8 +267,6 @@ def generar_pdf_historial_paquetes():
     # Convertir el HTML renderizado en un objeto PDF en memoria
     return io.BytesIO(html_renderizado.encode("utf-8"))
 
-
-
 def obtener_datos_historial_pedido():
     try:
         connection = utils.get_connection()
@@ -309,17 +306,44 @@ def obtener_datos_historial_equipos():
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT he.idHistorialEquipo, e.Nombre AS nombreEquipo, gi.Nombre AS nombreInstrumento, 
-                       he.tipoOperacion, he.campo, he.valorAnterior, he.valorNuevo, 
-                       he.observaciones, he.fechaCambio, 
+                SELECT he.idHistorialEquipo, 
+                       he.idEquipo,  
+                       COALESCE(e.Nombre, he.nombreEquipoPrevio) AS nombreEquipo,  
+                       COALESCE(gi.Nombre, (
+                           SELECT hg.nombreInstrumentoPrevio  
+                           FROM Historial_GInstrumento hg  
+                           WHERE hg.idInstrumento = he.idInstrumento  
+                           AND hg.nombreInstrumentoPrevio IS NOT NULL  
+                           ORDER BY hg.fechaCambio DESC LIMIT 1
+                       ), (
+                           SELECT hi.nombreHerramientaPrevio  
+                           FROM Historial_IInstrumento hi  
+                           WHERE hi.idInstrumentoIndividual = he.idInstrumento  
+                           AND hi.nombreHerramientaPrevio IS NOT NULL  
+                           ORDER BY hi.fechaCambio DESC LIMIT 1
+                       )) AS nombreInstrumento,  
+                       he.observaciones, he.fechaCambio,  
                        COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
                 FROM Historial_Equipos he
                 LEFT JOIN Equipo e ON he.idEquipo = e.idEquipo
                 LEFT JOIN GInstrumento gi ON he.idInstrumento = gi.idInstrumento
                 LEFT JOIN Usuario u ON he.idUsuario = u.idUsuario
-                ORDER BY he.idHistorialEquipo ASC; 
+                ORDER BY he.idHistorialEquipo ASC;
             """)
             historial_equipos = cursor.fetchall()
+
+        historial_equipos = [list(registro) for registro in historial_equipos]
+
+        nombre_por_id = {}  # Diccionario para rastrear nombres por ID
+        for registro in historial_equipos:
+            id_equipo = registro[1]
+            nombre_equipo = registro[2]
+
+            # Si ya hay un nombre registrado para este ID, úsalo en todos los registros con el mismo idEquipo
+            if id_equipo in nombre_por_id and (nombre_equipo is None or nombre_equipo == ''):
+                registro[2] = nombre_por_id[id_equipo]  # Asignar el nombre correcto
+            elif nombre_equipo:  
+                nombre_por_id[id_equipo] = nombre_equipo  # Guardar el nombre más reciente
 
         return {
             "historial_equipos": historial_equipos,
@@ -348,15 +372,30 @@ def obtener_datos_historial_ginstrumento():
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT hg.idHistorial, gi.Nombre AS nombreInstrumento, 
-                       hg.observaciones, hg.fechaCambio, 
+                SELECT hg.idHistorial, 
+                       hg.idInstrumento,  
+                       COALESCE(gi.Nombre, hg.nombreInstrumentoPrevio) AS nombreInstrumento,  -- 🚀 Toma el nombre actual si aún existe, si no usa el previo
+                       hg.observaciones, hg.fechaCambio,  
                        COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
                 FROM Historial_GInstrumento hg
-                LEFT JOIN GInstrumento gi ON hg.idInstrumento = gi.idInstrumento
+                LEFT JOIN GInstrumento gi ON hg.idInstrumento = gi.idInstrumento  -- 🚀 Se une con GInstrumento para obtener el nombre actual
                 LEFT JOIN Usuario u ON hg.idUsuario = u.idUsuario
-                ORDER BY hg.idHistorial ASC; 
+                ORDER BY hg.idHistorial ASC;
             """)
             historial_ginstrumento = cursor.fetchall()
+
+        historial_ginstrumento = [list(registro) for registro in historial_ginstrumento]
+
+        nombre_por_id = {}  # Diccionario para rastrear nombres
+        for registro in historial_ginstrumento:
+            id_instrumento = registro[1]
+            nombre = registro[2]
+
+            # Si ya hay un nombre registrado para este ID, úsalo en todos los registros con el mismo idInstrumento
+            if id_instrumento in nombre_por_id and (nombre is None or nombre == ''):
+                registro[2] = nombre_por_id[id_instrumento]  # Asignar el nombre correcto
+            elif nombre:  
+                nombre_por_id[id_instrumento] = nombre  # Guardar el nombre más reciente
 
         return {
             "historial_ginstrumento": historial_ginstrumento,
@@ -385,16 +424,30 @@ def obtener_datos_historial_iinstrumento():
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT hi.idHistorialIndividual, gi.Nombre AS nombreHerramienta, 
-                       hi.observaciones, hi.fechaCambio, 
-                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                SELECT hi.idHistorialIndividual, 
+                       hi.idInstrumentoIndividual,  
+                       hi.nombreHerramientaPrevio,  
+                       hi.observaciones, 
+                       hi.fechaCambio,  
+                       COALESCE(u.Nombres, 'Usuario desconocido') AS usuario
                 FROM Historial_IInstrumento hi
-                LEFT JOIN IInstrumento ii ON hi.idInstrumentoIndividual = ii.idInstrumentoIndividual
-                LEFT JOIN GInstrumento gi ON ii.idInstrumentoGrupo = gi.idInstrumento
                 LEFT JOIN Usuario u ON hi.idUsuario = u.idUsuario
-                ORDER BY hi.idHistorialIndividual ASC; 
+                ORDER BY hi.idHistorialIndividual ASC;
             """)
             historial_iinstrumento = cursor.fetchall()
+
+        historial_iinstrumento = [list(registro) for registro in historial_iinstrumento]
+
+        nombre_por_id = {}  # Diccionario para rastrear nombres
+        for registro in historial_iinstrumento:
+            id_instrumento = registro[1]
+            nombre = registro[2]
+
+            # Si ya hay un nombre registrado para este ID, úsalo
+            if id_instrumento in nombre_por_id and (nombre is None or nombre == ''):
+                registro[2] = nombre_por_id[id_instrumento]
+            elif nombre:  
+                nombre_por_id[id_instrumento] = nombre  # Guardamos el nombre más reciente
 
         return {
             "historial_iinstrumento": historial_iinstrumento,
@@ -471,54 +524,70 @@ def obtener_datos_paquete():
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT p.idPaquete, p.Nombre AS nombrePaquete, p.idEspecialidad, 
-                       e.idEquipo, e.Nombre AS nombreEquipo, 
-                       gi.idInstrumento AS idInstrumentoGrupo, gi.Nombre AS nombreInstrumento, 
-                       gi.CodigoDeBarras AS codigoInstrumento, COALESCE(ei.cantidad, 0) AS cantidad_instrumento_equipo
-                FROM Paquete p
+                SELECT hp.idHistorialPaquete,  -- 🚀 ID Historial
+                       p.idPaquete,  -- 🚀 ID Paquete  
+                       COALESCE(p.Nombre, hp.nombrePaquetePrevio) AS nombrePaquete,  
+                       p.idEspecialidad, 
+                       e.idEquipo,  
+                       COALESCE(e.Nombre, he.nombreEquipoPrevio) AS nombreEquipo,  
+                       gi.idInstrumento AS idInstrumentoGrupo, 
+                       COALESCE(gi.Nombre, hg.nombreInstrumentoPrevio) AS nombreInstrumento,  
+                       gi.CodigoDeBarras AS codigoInstrumento, 
+                       COALESCE(ei.cantidad, 0) AS cantidad_instrumento_equipo,  
+                       hp.observaciones, hp.fechaCambio,  
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                FROM Historial_Paquete hp
+                LEFT JOIN Paquete p ON hp.idPaquete = p.idPaquete  
                 LEFT JOIN Paquete_Equipo pe ON p.idPaquete = pe.idPaquete
                 LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
+                LEFT JOIN Historial_Equipos he ON he.idEquipo = e.idEquipo  
                 LEFT JOIN Equipo_Instrumento ei ON e.idEquipo = ei.idEquipo
                 LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                ORDER BY p.idPaquete, e.idEquipo, gi.idInstrumento ASC;
+                LEFT JOIN Historial_GInstrumento hg ON hg.idInstrumento = gi.idInstrumento  
+                LEFT JOIN Usuario u ON hp.idUsuario = u.idUsuario
+                ORDER BY hp.idHistorialPaquete ASC;
             """)
             paquete_datos = cursor.fetchall()
 
-            cursor.execute("""
-                SELECT p.idPaquete, gi.idInstrumento, gi.Nombre, gi.CodigoDeBarras, COALESCE(pi.cantidad, 0)
-                FROM Paquete p
-                LEFT JOIN Paquete_Instrumento pi ON p.idPaquete = pi.idPaquete
-                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
-                ORDER BY p.idPaquete, gi.idInstrumento ASC;
-            """)
-            paquete_instrumentos = cursor.fetchall()
+        # 🚀 Convertir cada tupla en una lista para que sea editable
+        paquete_datos = [list(registro) for registro in paquete_datos]
 
-        paquetes_por_grupo = {}
-        for item in paquete_datos:
-            id_paquete = item[0]
-            if id_paquete not in paquetes_por_grupo:
-                paquetes_por_grupo[id_paquete] = {
-                    "datos": [],
-                    "instrumentos_paquete": [],
-                    "cantidad_total_instrumentos": 0,
-                    "cantidad_total_instrumentos_paquete": 0,
-                    "nombrePaquete": item[1],
-                    "idEspecialidad": item[2]
-                }
-            
-            cantidad_equipo = int(item[8]) if item[8] is not None else 0
-            paquetes_por_grupo[id_paquete]["datos"].append(item[3:9])
-            paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos"] += cantidad_equipo
-        
-        for item in paquete_instrumentos:
-            id_paquete = item[0]
-            if id_paquete in paquetes_por_grupo:
-                cantidad_paquete = int(item[4]) if item[4] is not None else 0
-                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append(item[1:5])
-                paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos_paquete"] += cantidad_paquete
+        # 🚀 **Asignar el mismo `nombrePaquetePrevio` a registros con el mismo `idPaquete`**
+        nombre_paquete_por_id = {}
+        for registro in paquete_datos:
+            id_historial_paquete = registro[0]  # 🚀 ID Historial
+            id_paquete = registro[1]  # 🚀 ID Paquete
+            nombre_paquete = registro[2]
+
+            if id_paquete in nombre_paquete_por_id and (nombre_paquete is None or nombre_paquete == ''):
+                registro[2] = nombre_paquete_por_id[id_paquete]
+            elif nombre_paquete:  
+                nombre_paquete_por_id[id_paquete] = nombre_paquete
+
+        # 🚀 **Asignar el mismo `nombreEquipoPrevio` a registros con el mismo `idEquipo`**
+        nombre_equipo_por_id = {}
+        for registro in paquete_datos:
+            id_equipo = registro[5]  # 🚀 ID Equipo
+            nombre_equipo = registro[6]  # 🚀 Nombre Equipo
+
+            if id_equipo in nombre_equipo_por_id and (nombre_equipo is None or nombre_equipo == ''):
+                registro[6] = nombre_equipo_por_id[id_equipo]
+            elif nombre_equipo:  
+                nombre_equipo_por_id[id_equipo] = nombre_equipo
+
+        # 🚀 **Asignar el mismo `nombreInstrumentoPrevio` a registros con el mismo `idInstrumento`**
+        nombre_instrumento_por_id = {}
+        for registro in paquete_datos:
+            id_instrumento = registro[7]  # 🚀 ID Instrumento
+            nombre_instrumento = registro[8]  # 🚀 Nombre Instrumento
+
+            if id_instrumento in nombre_instrumento_por_id and (nombre_instrumento is None or nombre_instrumento == ''):
+                registro[8] = nombre_instrumento_por_id[id_instrumento]
+            elif nombre_instrumento:  
+                nombre_instrumento_por_id[id_instrumento] = nombre_instrumento
 
         return {
-            "paquetes_por_grupo": paquetes_por_grupo,
+            "paquete_datos": paquete_datos,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
 
@@ -1526,10 +1595,10 @@ async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Respo
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             if data.idInstrumento:
-                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
+                cursor.execute("SELECT idInstrumento, Nombre FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
                 grupo = cursor.fetchone()
             elif data.nombreInstrumento:
-                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (data.nombreInstrumento,))
+                cursor.execute("SELECT idInstrumento, Nombre FROM GInstrumento WHERE Nombre = %s", (data.nombreInstrumento,))
                 grupo = cursor.fetchone()
             else:
                 response.status_code = status.HTTP_400_BAD_REQUEST
@@ -1540,17 +1609,31 @@ async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Respo
                 return {"message": "Grupo de instrumentos no encontrado"}
 
             idInstrumento = grupo[0]
+            nombreInstrumento = grupo[1]  
+
+            cursor.execute("""
+                UPDATE Historial_IInstrumento 
+                SET nombreHerramientaPrevio = %s 
+                WHERE idInstrumentoIndividual IN (
+                    SELECT idInstrumentoIndividual FROM IInstrumento WHERE idInstrumentoGrupo = %s
+                )
+            """, (nombreInstrumento, idInstrumento))
+
+            cursor.execute("""
+                UPDATE Historial_GInstrumento 
+                SET nombreInstrumentoPrevio = %s 
+                WHERE idInstrumento = %s
+            """, (nombreInstrumento, idInstrumento))
 
             cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoGrupo = %s", (idInstrumento,))
-
             cursor.execute("DELETE FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
             cursor.execute("DELETE FROM Paquete_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
             cursor.execute("DELETE FROM Pedido_IInstrumento WHERE idInstrumento = %s", (idInstrumento,))
-
             cursor.execute("DELETE FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
-
+            
             connection.commit()
-            return {"message": "Grupo de instrumentos eliminado correctamente junto con sus instrumentos asociados"}
+
+            return {"message": f"Grupo de instrumentos '{nombreInstrumento}' eliminado correctamente junto con sus instrumentos asociados"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1790,12 +1873,12 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # Validar si se proporciona ID o nombre del equipo
+            # 🚀 **Validar si se proporciona ID o nombre del equipo**
             if data.idEquipo:
-                cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
+                cursor.execute("SELECT idEquipo, Nombre FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
                 equipo = cursor.fetchone()
             elif data.nombreEquipo:
-                cursor.execute("SELECT idEquipo FROM Equipo WHERE Nombre = %s", (data.nombreEquipo,))
+                cursor.execute("SELECT idEquipo, Nombre FROM Equipo WHERE Nombre = %s", (data.nombreEquipo,))
                 equipo = cursor.fetchone()
             else:
                 response.status_code = status.HTTP_400_BAD_REQUEST
@@ -1806,15 +1889,22 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
                 return {"message": "Equipo no encontrado"}
 
             idEquipo = equipo[0]
+            nombreEquipo = equipo[1]  # 🚀 **Guardar el nombre antes de eliminar**
 
+            # 🚀 **Actualizar `Historial_Equipos` con el nombre previo**
+            cursor.execute("""
+                UPDATE Historial_Equipos 
+                SET nombreEquipoPrevio = %s 
+                WHERE idEquipo = %s
+            """, (nombreEquipo, idEquipo))
+
+            # 🚀 **Eliminar relaciones antes de eliminar el equipo**
             cursor.execute("DELETE FROM Equipo_Instrumento WHERE idEquipo = %s", (idEquipo,))
-
             cursor.execute("UPDATE IInstrumento SET idEquipo = NULL WHERE idEquipo = %s", (idEquipo,))
-
             cursor.execute("DELETE FROM Equipo WHERE idEquipo = %s", (idEquipo,))
 
             connection.commit()
-            return {"message": f"Equipo {idEquipo} eliminado correctamente junto con sus relaciones asociadas"}
+            return {"message": f"Equipo '{nombreEquipo}' eliminado correctamente junto con sus relaciones asociadas"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -2164,12 +2254,11 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # Validar si se proporciona ID o nombre del paquete
             if data.idPaquete:
-                cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
+                cursor.execute("SELECT idPaquete, Nombre FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
                 paquete_existente = cursor.fetchone()
             elif data.nombrePaquete:
-                cursor.execute("SELECT idPaquete FROM Paquete WHERE Nombre = %s", (data.nombrePaquete,))
+                cursor.execute("SELECT idPaquete, Nombre FROM Paquete WHERE Nombre = %s", (data.nombrePaquete,))
                 paquete_data = cursor.fetchone()
                 if paquete_data:
                     data.idPaquete = paquete_data[0]
@@ -2185,16 +2274,21 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
                 return {"message": "Paquete no encontrado"}
 
             idPaquete = data.idPaquete
+            nombrePaquete = paquete_existente[1]  # 🚀 **Guardar el nombre antes de eliminar**
+
+            cursor.execute("""
+                UPDATE Historial_Paquetes 
+                SET nombrePaquetePrevio = %s 
+                WHERE idPaquete = %s
+            """, (nombrePaquete, idPaquete))
 
             cursor.execute("DELETE FROM Paquete_Equipo WHERE idPaquete = %s", (idPaquete,))
             cursor.execute("DELETE FROM Paquete_Instrumento WHERE idPaquete = %s", (idPaquete,))
-
             cursor.execute("UPDATE IInstrumento SET idPaquete = NULL WHERE idPaquete = %s", (idPaquete,))
-
             cursor.execute("DELETE FROM Paquete WHERE idPaquete = %s", (idPaquete,))
 
             connection.commit()
-            return {"message": f"Paquete {idPaquete} eliminado correctamente junto con sus asociaciones"}
+            return {"message": f"Paquete '{nombrePaquete}' eliminado correctamente junto con sus asociaciones"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR

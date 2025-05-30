@@ -40,6 +40,7 @@
         <thead>
             <tr>
                 <th>ID Historial</th>
+                <th>ID Instrumento Individual</th>
                 <th>Herramienta</th>
                 <th>Observaciones</th>
                 <th>Fecha de Cambio</th>
@@ -50,10 +51,11 @@
             {% for instrumento in historial_iinstrumento %}
             <tr>
                 <td>{{ instrumento[0] }}</td>  <!-- ID Historial -->
-                <td>{{ instrumento[1] }}</td>  <!-- Nombre Herramienta -->
-                <td>{{ instrumento[2] }}</td>  <!-- Observaciones -->
-                <td>{{ instrumento[3] }}</td>  <!-- Fecha de Cambio -->
-                <td>{{ instrumento[4] }}</td>  <!-- Usuario -->
+                <td>{{ instrumento[1] }}</td>  <!-- ID Instrumento Individual -->
+                <td>{{ instrumento[2] }}</td>  <!-- Nombre Herramienta -->
+                <td>{{ instrumento[3] }}</td>  <!-- Observaciones -->
+                <td>{{ instrumento[4] }}</td>  <!-- Fecha de Cambio -->
+                <td>{{ instrumento[5] }}</td>  <!-- Usuario -->
             </tr>
             {% endfor %}
         </tbody>

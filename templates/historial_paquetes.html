@@ -33,6 +33,7 @@
     </style>
 </head>
 <body>
+
     <h1>Historial de Paquetes</h1>
     <p>Fecha del reporte: {{ fecha_reporte }}</p>
 
@@ -42,10 +43,6 @@
                 <th>Nombre del Paquete</th>
                 <th>Nombre del Equipo</th>
                 <th>Nombre del Instrumento</th>
-                <th>Tipo de Operación</th>
-                <th>Campo Modificado</th>
-                <th>Valor Anterior</th>
-                <th>Valor Nuevo</th>
                 <th>Observaciones</th>
                 <th>Fecha de Cambio</th>
                 <th>Usuario</th>
@@ -57,10 +54,6 @@
                 <td>{{ paquete[1] }}</td>  <!-- Nombre del Paquete -->
                 <td>{{ paquete[9] }}</td>  <!-- Nombre del Equipo -->
                 <td>{{ paquete[10] }}</td>  <!-- Nombre del Instrumento -->
-                <td>{{ paquete[2] }}</td>  <!-- Tipo de Operación -->
-                <td>{{ paquete[3] }}</td>  <!-- Campo Modificado -->
-                <td>{{ paquete[4] if paquete[4] else "N/A" }}</td>  <!-- Valor Anterior -->
-                <td>{{ paquete[5] if paquete[5] else "N/A" }}</td>  <!-- Valor Nuevo -->
                 <td>{{ paquete[6] if paquete[6] else "Sin observaciones" }}</td>  <!-- Observaciones -->
                 <td>{{ paquete[7] }}</td>  <!-- Fecha de Cambio -->
                 <td>{{ paquete[8] }}</td>  <!-- Usuario -->
@@ -72,5 +65,6 @@
     <div class="footer">
         <p>Reporte generado automáticamente por el sistema.</p>
     </div>
+
 </body>
 </html>

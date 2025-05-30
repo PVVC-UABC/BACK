@@ -40,12 +40,9 @@
         <thead>
             <tr>
                 <th>ID Historial</th>
+                <th>ID Equipo</th>  <!-- 🚀 Nueva columna -->
                 <th>Equipo</th>
                 <th>Instrumento</th>
-                <th>Operación</th>
-                <th>Campo</th>
-                <th>Valor Anterior</th>
-                <th>Valor Nuevo</th>
                 <th>Observaciones</th>
                 <th>Fecha de Cambio</th>
                 <th>Usuario</th>
@@ -55,15 +52,12 @@
             {% for equipo in historial_equipos %}
             <tr>
                 <td>{{ equipo[0] }}</td>  <!-- ID Historial -->
-                <td>{{ equipo[1] }}</td>  <!-- Nombre Equipo -->
-                <td>{{ equipo[2] }}</td>  <!-- Nombre Instrumento -->
-                <td>{{ equipo[3] }}</td>  <!-- Tipo de Operación -->
-                <td>{{ equipo[4] }}</td>  <!-- Campo -->
-                <td>{{ equipo[5] }}</td>  <!-- Valor Anterior -->
-                <td>{{ equipo[6] }}</td>  <!-- Valor Nuevo -->
-                <td>{{ equipo[7] }}</td>  <!-- Observaciones -->
-                <td>{{ equipo[8] }}</td>  <!-- Fecha de Cambio -->
-                <td>{{ equipo[9] }}</td>  <!-- Usuario -->
+                <td>{{ equipo[1] }}</td>  <!-- ID Equipo -->
+                <td>{{ equipo[2] }}</td>  <!-- Nombre Equipo -->
+                <td>{{ equipo[3] }}</td>  <!-- Nombre Instrumento -->
+                <td>{{ equipo[4] }}</td>  <!-- Observaciones -->
+                <td>{{ equipo[5] }}</td>  <!-- Fecha de Cambio -->
+                <td>{{ equipo[6] }}</td>  <!-- Usuario -->
             </tr>
             {% endfor %}
         </tbody>
