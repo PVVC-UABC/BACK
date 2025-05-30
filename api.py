@@ -2142,72 +2142,109 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     finally:
         connection.close()
 
-@app.put("/updateEquipoInstrumento")
-async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, response: Response):
+@app.put("/updatePaqueteInstrumento")
+async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # Validar que el equipo exista
-            cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
-            equipo_existente = cursor.fetchone()
-            if not equipo_existente:
+            # Validar existencia del paquete
+            cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
+            paquete_existente = cursor.fetchone()
+            if not paquete_existente:
                 response.status_code = status.HTTP_404_NOT_FOUND
-                return {"message": "Equipo no encontrado"}
+                return {"message": f"Paquete con id {data.idPaquete} no encontrado"}
 
-            for herramienta in data.herramientas:
-                idInstrumento = herramienta.get("idInstrumento")
-                nombreInstrumento = herramienta.get("nombreInstrumento")
-                cantidad = herramienta["cantidad"]
+            eliminados = []  
+            agregados = []  
+            cantidad_total_agregada = 0  
 
-                if cantidad <= 0:  
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No se puede agregar un instrumento con cantidad {cantidad}"}
+            for instrumento in data.instrumentos:
+                idInstrumento = instrumento["idInstrumento"]  # ⚠ ID del grupo desde `GInstrumento`
+                nueva_cantidad = instrumento["cantidad"]
 
-                if nombreInstrumento and not idInstrumento:
-                    cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
-                    instrumento_existente = cursor.fetchone()
-                    if not instrumento_existente:
-                        response.status_code = status.HTTP_404_NOT_FOUND
-                        return {"message": f"Instrumento '{nombreInstrumento}' no encontrado"}
-                    idInstrumento = instrumento_existente[0]
-
-                # Validar existencia de instrumento
-                cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+                # 🔎 **Verificar que `idInstrumento` existe en `GInstrumento`**
+                cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
                 instrumento_existente = cursor.fetchone()
                 if not instrumento_existente:
                     response.status_code = status.HTTP_404_NOT_FOUND
-                    return {"message": f"Instrumento con id {idInstrumento} no encontrado"}
+                    return {"message": f"Instrumento con id {idInstrumento} no encontrado en `GInstrumento`"}
 
-                cantidad_disponible = instrumento_existente[0]
-
-                # Obtener cantidad ya asignada a otros equipos
-                cursor.execute("SELECT SUM(cantidad) FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
-                cantidad_asignada = cursor.fetchone()[0] or 0
-
-                # Validar si hay suficiente inventario disponible
-                cantidad_restante = cantidad_disponible - cantidad_asignada
-                if cantidad > cantidad_restante:
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"No hay suficientes unidades disponibles del instrumento {idInstrumento}. Quedan {cantidad_restante} disponibles."}
-
-                # Insertar o actualizar la cantidad en `Equipo_Instrumento`
+                # 🔎 **Buscar instrumentos individuales (`idInstrumentoIndividual`) en `IInstrumento`**
                 cursor.execute("""
-                    INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE cantidad = cantidad + %s
-                """, (data.idEquipo, idInstrumento, cantidad, cantidad))
+                    SELECT idInstrumentoIndividual FROM IInstrumento 
+                    WHERE idInstrumentoGrupo = %s AND idEquipo IS NULL AND idPaquete = %s 
+                    ORDER BY idInstrumentoIndividual ASC
+                """, (idInstrumento, data.idPaquete))
+                instrumentos_asignados = cursor.fetchall()
 
-                # ✅ **Actualizar `idEquipo` en `IInstrumento` para reflejar la asignación**
+                # 🛠 **Si hay más instrumentos asignados de los necesarios, liberar los sobrantes**
+                if len(instrumentos_asignados) > nueva_cantidad:
+                    exceso = len(instrumentos_asignados) - nueva_cantidad
+                    
+                    # 🔎 **Obtener los IDs de los instrumentos que deben eliminarse**
+                    cursor.execute("""
+                        SELECT idInstrumentoIndividual FROM IInstrumento 
+                        WHERE idInstrumentoGrupo = %s AND idPaquete = %s 
+                        ORDER BY idInstrumentoIndividual DESC
+                    """, (idInstrumento, data.idPaquete))
+                    instrumentos_a_eliminar = cursor.fetchall()[:exceso]  # Tomamos solo los que sobran
+
+                    for instrumento in instrumentos_a_eliminar:
+                        cursor.execute("""
+                            UPDATE IInstrumento 
+                            SET idPaquete = NULL 
+                            WHERE idInstrumentoIndividual = %s
+                        """, (instrumento[0],))
+                    eliminados.append(idInstrumento)
+
+                elif len(instrumentos_asignados) < nueva_cantidad:
+                    cantidad_faltante = nueva_cantidad - len(instrumentos_asignados)
+
+                    # Buscar más instrumentos disponibles para completar la cantidad correcta
+                    cursor.execute("""
+                        SELECT idInstrumentoIndividual FROM IInstrumento 
+                        WHERE idInstrumentoGrupo = %s AND idEquipo IS NULL AND idPaquete IS NULL 
+                        ORDER BY idInstrumentoIndividual ASC 
+                        LIMIT %s
+                    """, (idInstrumento, cantidad_faltante))
+                    nuevos_instrumentos = cursor.fetchall()
+
+                    if len(nuevos_instrumentos) < cantidad_faltante:
+                        response.status_code = status.HTTP_400_BAD_REQUEST
+                        return {"message": f"No hay suficientes herramientas individuales sin asignación. Disponibles: {len(nuevos_instrumentos)}"}
+
+                    cantidad_total_agregada += len(nuevos_instrumentos)
+
+                    # ✅ **Asignar `idPaquete` a los instrumentos disponibles**
+                    for instrumento in nuevos_instrumentos:
+                        cursor.execute("""
+                            UPDATE IInstrumento 
+                            SET idPaquete = %s 
+                            WHERE idInstrumentoIndividual = %s
+                        """, (data.idPaquete, instrumento[0]))
+                    agregados.append(idInstrumento)
+
+                # **Actualizar la cantidad en `Paquete_Instrumento`**
                 cursor.execute("""
-                    UPDATE IInstrumento 
-                    SET idEquipo = %s 
-                    WHERE idInstrumentoGrupo = %s 
-                    AND idEquipo IS NULL 
-                    LIMIT %s
-                """, (data.idEquipo, idInstrumento, cantidad))
+                    UPDATE Paquete_Instrumento 
+                    SET cantidad = %s 
+                    WHERE idPaquete = %s AND idInstrumento = %s
+                """, (nueva_cantidad, data.idPaquete, idInstrumento))
 
             connection.commit()
-            return {"message": "Cantidad de herramientas modificada correctamente y asignación reflejada en Instrumentos"}
+            
+            mensajes = []
+            if eliminados:
+                mensajes.append(f"Instrumentos eliminados: {', '.join(map(str, eliminados))}")
+            if agregados:
+                mensajes.append(f"Instrumentos agregados: {', '.join(map(str, agregados))}")
+            if not mensajes:
+                mensajes.append("Instrumentos actualizados correctamente en el paquete")
+
+            return {
+                "message": " | ".join(mensajes),
+                "cantidad_total_agregada": cantidad_total_agregada  # 🚀 **Incluye cantidad total agregada**
+            }
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
