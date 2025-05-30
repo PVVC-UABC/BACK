@@ -943,6 +943,99 @@ async def get_equipo_instrumentos(index: int, response: Response):
     finally:
         connection.close()
 
+@app.get("/getPaqueteEquipos/{index}")
+async def get_paquete_equipos(index: int, response: Response):
+    try:
+        connection = utils.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT paq.idPaquete, eq.Nombre AS NombreEquipo FROM Paquete_Equipo paq JOIN Equipo eq ON paq.idEquipo = %s", (index,))
+            equipos = cursor.fetchall()
+            if not equipos:
+                return JSONResponse(
+                    content={"message": "No se encontraron equipos para este paquete"},
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            equipos_list = utils.tokenize(equipos, cursor.description)
+            return JSONResponse(
+                content={"equipos": equipos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(
+            content={"message": "Error al obtener los equipos del paquete"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
+        
+@app.get("/getPaqueteInstrumentos/{index}")
+async def get_paquete_instrumentos(index: int, response: Response):
+    connection = utils.get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT pi.idPaquete, gi.Nombre AS NombreInstrumento, pi.cantidad 
+                FROM Paquete_Instrumento pi 
+                JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento 
+                WHERE pi.idPaquete = %s
+            """, (index,))
+            instrumentos = cursor.fetchall()
+            if not instrumentos:
+                return JSONResponse(
+                    content={"message": "No se encontraron instrumentos para este paquete"},
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            instrumentos_list = utils.tokenize(instrumentos, cursor.description)
+            return JSONResponse(
+                content={"instrumentos": instrumentos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(
+            content={"message": "Error al obtener los instrumentos del paquete"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
+            
+@app.get("/getEquipoInstrumento/{index}")
+async def get_equipo_instrumento(index: int, response: Response):
+    connection = utils.get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                ei.idEquipo, 
+                gi.Nombre AS NombreInstrumento, 
+                ei.cantidad
+                FROM Equipo_Instrumento ei
+                LEFT JOIN GInstrumento gi ON ei.idInstrumento = %s
+            """, (index,))
+            instrumentos = cursor.fetchall()
+            if not instrumentos:
+                return JSONResponse(
+                    content={"message": "No se encontraron instrumentos para este equipo"},
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            instrumentos_list = utils.tokenize(instrumentos, cursor.description)
+            return JSONResponse(
+                content={"instrumentos": instrumentos_list},
+                status_code=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(f"Error MySQL: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(
+            content={"message": "Error al obtener los instrumentos del equipo"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    finally:
+        connection.close()
+
 @app.get("/getPaqueteEquiposInstrumentos")
 async def descargar_paquete():
     pdf_file = generar_pdf_paquete()
@@ -2783,7 +2876,7 @@ async def eliminar_pedido(data: DeletePedidoRequest, response: Response):
                 return {"message": "Pedido no encontrado"}
 
             cursor.execute("DELETE FROM Pedido_Equipo WHERE idPedido = %s", (data.idPedido,))
-            cursor.execute("DELETE FROM Pedido_GInstrumento WHERE idPedido = %s", (data.idPedido,))
+            cursor.execute("DELETE FROM Pedido_IInstrumento WHERE idPedido = %s", (data.idPedido,))
             cursor.execute("DELETE FROM Pedido WHERE idPedido = %s", (data.idPedido,))
 
             connection.commit()
@@ -2871,7 +2964,7 @@ async def obtener_pedido(data: GetPedidoRequest, response: Response):
 
             cursor.execute("""
                 SELECT gi.idInstrumento, gi.Nombre, pi.cantidad
-                FROM Pedido_GInstrumento pi
+                FROM Pedido_IInstrumento pi
                 JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
                 WHERE pi.idPedido = %s
             """, (data.idPedido,))
