@@ -51,8 +51,8 @@ class GetInstrumentoRequest(BaseModel):
     nombreInstrumentoIndividual: Union[str, None] = None
 
 class UpdateGInstrumentoRequest(BaseModel):
-    idInstrumento: Union[int, None] = None
-    nombreInstrumento: Union[str, None] = None
+    idInstrumento: Optional[int] = None
+    nombreInstrumento: Optional[str] = None
     nuevaCantidad: int
 
 class GetInstrumentosPorGrupoRequest(BaseModel):
@@ -64,6 +64,9 @@ class UpdateIInstrumentoRequest(BaseModel):
     nuevoEstado: Union[str, None] = None
     nuevaUbicacion: Union[str, None] = None
     nuevaEsterilizacion: Union[datetime, None] = None
+    idEquipo: Optional[int] = None 
+    idPaquete: Optional[int] = None  
+
 
 class DeleteGInstrumentoRequest(BaseModel):
     idInstrumento: Union[int, None] = None
@@ -149,13 +152,13 @@ class PedidoEquipo(BaseModel):
     equipos: List[int]  
 
 class Instrumento(BaseModel):
-    idInstrumento: Union[int, None] = None  
-    nombreInstrumento: Union[str, None] = None  
-    cantidad: int  
+    idInstrumento: Optional[int] = None
+    nombreInstrumento: Optional[str] = None
 
 class PedidoInstrumento(BaseModel):
-    idPedido: int 
-    instrumentos: List[Instrumento]  
+    idPedido: int
+    instrumentos: List[Instrumento]
+
 
 class DeletePedidoEquipoRequest(BaseModel):
     idPedido: int
@@ -1377,25 +1380,46 @@ async def obtener_instrumento(data: GetInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
             if data.idInstrumentoIndividual:
-                cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion, i.idInstrumentoGrupo
-                                  FROM IInstrumento i
-                                  JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
-                                  WHERE i.idInstrumentoIndividual = %s""", (data.idInstrumentoIndividual,))
+                consulta = """SELECT 
+                                i.idInstrumentoIndividual, 
+                                g.Nombre AS nombreInstrumentoGrupo, 
+                                i.ultimaEsterilizacion, 
+                                i.Estado, 
+                                i.Ubicacion, 
+                                i.idInstrumentoGrupo,
+                                i.idEquipo, 
+                                e.Nombre AS nombreEquipo, 
+                                i.idPaquete, 
+                                p.Nombre AS nombrePaquete
+                              FROM IInstrumento i
+                              JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
+                              LEFT JOIN Equipo e ON i.idEquipo = e.idEquipo
+                              LEFT JOIN Paquete p ON i.idPaquete = p.idPaquete
+                              WHERE i.idInstrumentoIndividual = %s"""
+                cursor.execute(consulta, (data.idInstrumentoIndividual,))
                 instrumento = cursor.fetchone()
+
             elif data.nombreInstrumentoIndividual:
-                cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion, i.idInstrumentoGrupo
-                                  FROM IInstrumento i
-                                  JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
-                                  WHERE g.Nombre = %s""", (data.nombreInstrumentoIndividual,))
+                consulta = """SELECT 
+                                i.idInstrumentoIndividual, 
+                                g.Nombre AS nombreInstrumentoGrupo, 
+                                i.ultimaEsterilizacion, 
+                                i.Estado, 
+                                i.Ubicacion, 
+                                i.idInstrumentoGrupo,
+                                i.idEquipo, 
+                                e.Nombre AS nombreEquipo, 
+                                i.idPaquete, 
+                                p.Nombre AS nombrePaquete
+                              FROM IInstrumento i
+                              JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
+                              LEFT JOIN Equipo e ON i.idEquipo = e.idEquipo
+                              LEFT JOIN Paquete p ON i.idPaquete = p.idPaquete
+                              WHERE g.Nombre = %s"""
+                cursor.execute(consulta, (data.nombreInstrumentoIndividual,))
                 instrumento = cursor.fetchone()
+
             else:
                 response.status_code = status.HTTP_400_BAD_REQUEST
                 return {"message": "Debe proporcionar un idInstrumentoIndividual o un nombreInstrumentoIndividual"}
@@ -1410,7 +1434,11 @@ async def obtener_instrumento(data: GetInstrumentoRequest, response: Response):
                 "ultimaEsterilizacion": instrumento[2],
                 "Estado": instrumento[3],
                 "Ubicacion": instrumento[4],
-                "idInstrumentoGrupo": instrumento[5]
+                "idInstrumentoGrupo": instrumento[5],
+                "idEquipo": instrumento[6],
+                "nombreEquipo": instrumento[7] if instrumento[7] else "Sin asignación",
+                "idPaquete": instrumento[8],
+                "nombrePaquete": instrumento[9] if instrumento[9] else "Sin asignación"
             }
 
     except Exception as e:
@@ -1425,19 +1453,41 @@ async def obtener_todos_los_instrumentos(response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
+            # Consultar los instrumentos con sus equipos y paquetes asociados
             cursor.execute("""
-                SELECT i.idInstrumentoIndividual, i.idInstrumentoGrupo, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion
+                SELECT 
+                    i.idInstrumentoIndividual, 
+                    i.idInstrumentoGrupo, 
+                    g.Nombre AS nombreInstrumentoGrupo, 
+                    i.ultimaEsterilizacion, 
+                    i.Estado, 
+                    i.Ubicacion,
+                    i.idEquipo, 
+                    e.Nombre AS nombreEquipo,
+                    i.idPaquete, 
+                    p.Nombre AS nombrePaquete
                 FROM IInstrumento i
                 JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
+                LEFT JOIN Equipo e ON i.idEquipo = e.idEquipo
+                LEFT JOIN Paquete p ON i.idPaquete = p.idPaquete
             """)
             instrumentos = cursor.fetchall()
 
-            return [{"idInstrumentoIndividual": i[0], "idInstrumentoGrupo": i[1], "Nombre": i[2], 
-                     "ultimaEsterilizacion": i[3], "Estado": i[4], "Ubicacion": i[5]} for i in instrumentos]
+            return [
+                {
+                    "idInstrumentoIndividual": i[0], 
+                    "idInstrumentoGrupo": i[1], 
+                    "Nombre": i[2], 
+                    "ultimaEsterilizacion": i[3], 
+                    "Estado": i[4], 
+                    "Ubicacion": i[5],
+                    "idEquipo": i[6],
+                    "nombreEquipo": i[7] if i[7] else "Sin asignación",
+                    "idPaquete": i[8],
+                    "nombrePaquete": i[9] if i[9] else "Sin asignación"
+                } 
+                for i in instrumentos
+            ]
     
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1451,23 +1501,46 @@ async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, r
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
             if data.idInstrumentoGrupo:
-                cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion
-                                  FROM IInstrumento i
-                                  JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
-                                  WHERE i.idInstrumentoGrupo = %s""", (data.idInstrumentoGrupo,))
+                consulta = """SELECT 
+                                i.idInstrumentoIndividual, 
+                                g.Nombre AS nombreInstrumentoGrupo, 
+                                i.ultimaEsterilizacion, 
+                                i.Estado, 
+                                i.Ubicacion, 
+                                i.idInstrumentoGrupo,
+                                i.idEquipo, 
+                                e.Nombre AS nombreEquipo, 
+                                i.idPaquete, 
+                                p.Nombre AS nombrePaquete
+                              FROM IInstrumento i
+                              JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
+                              LEFT JOIN Equipo e ON i.idEquipo = e.idEquipo
+                              LEFT JOIN Paquete p ON i.idPaquete = p.idPaquete
+                              WHERE i.idInstrumentoGrupo = %s"""
+                cursor.execute(consulta, (data.idInstrumentoGrupo,))
                 instrumentos = cursor.fetchall()
+
             elif data.nombreInstrumentoGrupo:
-                cursor.execute("""SELECT i.idInstrumentoIndividual, g.Nombre, i.ultimaEsterilizacion, i.Estado, i.Ubicacion
-                                  FROM IInstrumento i
-                                  JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
-                                  WHERE g.Nombre = %s""", (data.nombreInstrumentoGrupo,))
+                consulta = """SELECT 
+                                i.idInstrumentoIndividual, 
+                                g.Nombre AS nombreInstrumentoGrupo, 
+                                i.ultimaEsterilizacion, 
+                                i.Estado, 
+                                i.Ubicacion, 
+                                i.idInstrumentoGrupo,
+                                i.idEquipo, 
+                                e.Nombre AS nombreEquipo, 
+                                i.idPaquete, 
+                                p.Nombre AS nombrePaquete
+                              FROM IInstrumento i
+                              JOIN GInstrumento g ON i.idInstrumentoGrupo = g.idInstrumento
+                              LEFT JOIN Equipo e ON i.idEquipo = e.idEquipo
+                              LEFT JOIN Paquete p ON i.idPaquete = p.idPaquete
+                              WHERE g.Nombre = %s"""
+                cursor.execute(consulta, (data.nombreInstrumentoGrupo,))
                 instrumentos = cursor.fetchall()
+
             else:
                 response.status_code = status.HTTP_400_BAD_REQUEST
                 return {"message": "Debe proporcionar un idInstrumentoGrupo o un nombreInstrumentoGrupo"}
@@ -1476,8 +1549,21 @@ async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, r
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "No se encontraron instrumentos en este grupo"}
 
-            return [{"idInstrumentoIndividual": i[0], "Nombre": i[1], "ultimaEsterilizacion": i[2], 
-                     "Estado": i[3], "Ubicacion": i[4]} for i in instrumentos]
+            return [
+                {
+                    "idInstrumentoIndividual": i[0],
+                    "Nombre": i[1],
+                    "ultimaEsterilizacion": i[2],
+                    "Estado": i[3],
+                    "Ubicacion": i[4],
+                    "idInstrumentoGrupo": i[5],
+                    "idEquipo": i[6],
+                    "nombreEquipo": i[7] if i[7] else "Sin asignación",
+                    "idPaquete": i[8],
+                    "nombrePaquete": i[9] if i[9] else "Sin asignación"
+                } 
+                for i in instrumentos
+            ]
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1486,19 +1572,12 @@ async def obtener_instrumentos_por_grupo(data: GetInstrumentosPorGrupoRequest, r
     finally:
         connection.close()
 
-
 @app.put("/updateGInstrumento")
 async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Determinar si se busca por ID o Nombre
             if data.idInstrumento:
                 cursor.execute("SELECT idInstrumento, Cantidad FROM GInstrumento WHERE idInstrumento = %s", (data.idInstrumento,))
                 grupo = cursor.fetchone()
@@ -1517,51 +1596,43 @@ async def actualizar_ginstrumento(data: UpdateGInstrumentoRequest, response: Res
             cantidad_actual = grupo[1]
             diferencia = data.nuevaCantidad - cantidad_actual
 
-            if diferencia > 0:  
+            if diferencia > 0:
                 for _ in range(diferencia):
                     cursor.execute("""
-                        INSERT INTO IInstrumento (idInstrumentoGrupo, Estado, Ubicacion, ultimaEsterilizacion)
-                        VALUES (%s, %s, %s, NOW())
+                        INSERT INTO IInstrumento (idInstrumentoGrupo, Estado, Ubicacion, ultimaEsterilizacion, idEquipo, idPaquete)
+                        VALUES (%s, %s, %s, NOW(), NULL, NULL)
                     """, (idInstrumento, "Disponible", "Almacén"))
-            
-            elif diferencia < 0:  
+
+            elif diferencia < 0:
                 cantidad_a_eliminar = abs(diferencia)
 
                 cursor.execute("""
-                    SELECT idInstrumentoIndividual FROM IInstrumento 
-                    WHERE idInstrumentoGrupo = %s AND Estado = 'Disponible' LIMIT %s
+                    SELECT idInstrumentoIndividual 
+                    FROM IInstrumento 
+                    WHERE idInstrumentoGrupo = %s 
+                    AND Estado = 'Disponible' 
+                    AND idEquipo IS NULL 
+                    AND idPaquete IS NULL
+                    LIMIT %s
                 """, (idInstrumento, cantidad_a_eliminar))
 
                 instrumentos_disponibles = cursor.fetchall()
+
                 if len(instrumentos_disponibles) < cantidad_a_eliminar:
                     response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": "No hay suficientes instrumentos disponibles para eliminar"}
+                    return {"message": "No hay suficientes instrumentos sin asignación para eliminar"}
 
+                # Eliminar los instrumentos seleccionados
                 for instrumento in instrumentos_disponibles:
                     cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoIndividual = %s", (instrumento[0],))
 
-                cursor.execute("""
-                    UPDATE Equipo_Instrumento 
-                    SET cantidad = GREATEST(cantidad - %s, 0) 
-                    WHERE idInstrumento = %s
-                """, (cantidad_a_eliminar, idInstrumento))
-
-                cursor.execute("""
-                    UPDATE Paquete_Instrumento 
-                    SET cantidad = GREATEST(cantidad - %s, 0) 
-                    WHERE idInstrumento = %s
-                """, (cantidad_a_eliminar, idInstrumento))
-
-                cursor.execute("""
-                    UPDATE Pedido_GInstrumento 
-                    SET cantidad = GREATEST(cantidad - %s, 0) 
-                    WHERE idInstrumento = %s
-                """, (cantidad_a_eliminar, idInstrumento))
-
+            if data.nuevaCantidad == 0:
+                cursor.execute("DELETE FROM IInstrumento WHERE idInstrumentoGrupo = %s", (idInstrumento,))
+                
             cursor.execute("UPDATE GInstrumento SET Cantidad = %s WHERE idInstrumento = %s", (data.nuevaCantidad, idInstrumento))
             connection.commit()
 
-            return {"message": f"Grupo de instrumentos actualizado correctamente en todas las tablas dependientes"}
+            return {"message": "Grupo de instrumentos actualizado correctamente"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1595,7 +1666,7 @@ async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Respo
 
             cursor.execute("DELETE FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
             cursor.execute("DELETE FROM Paquete_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
-            cursor.execute("DELETE FROM Pedido_GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
+            cursor.execute("DELETE FROM Pedido_IInstrumento WHERE idInstrumento = %s", (idInstrumento,))
 
             cursor.execute("DELETE FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
 
@@ -1609,21 +1680,28 @@ async def eliminar_ginstrumento(data: DeleteGInstrumentoRequest, response: Respo
     finally:
         connection.close()
 
-
 @app.put("/updateIInstrumento")
 async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             # Validar si el instrumento existe
-            cursor.execute("SELECT idInstrumentoIndividual FROM IInstrumento WHERE idInstrumentoIndividual = %s", (data.idInstrumentoIndividual,))
+            cursor.execute("SELECT idInstrumentoIndividual, idEquipo, idPaquete FROM IInstrumento WHERE idInstrumentoIndividual = %s", 
+                           (data.idInstrumentoIndividual,))
             instrumento = cursor.fetchone()
 
             if not instrumento:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "Instrumento no encontrado"}
 
-            # Construir la consulta de actualización dinámicamente
+            id_equipo_actual, id_paquete_actual = instrumento[1], instrumento[2]
+
+            # Validar que el instrumento solo puede estar en un equipo **o** en un paquete, no ambos
+            if data.idEquipo and data.idPaquete:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return {"message": "Un instrumento solo puede pertenecer a un equipo o a un paquete, pero no a ambos"}
+
+            # Construir la consulta de actualización
             campos_actualizar = []
             valores = []
 
@@ -1641,7 +1719,7 @@ async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Resp
 
             if data.nuevaEsterilizacion:
                 if isinstance(data.nuevaEsterilizacion, datetime):
-                    fecha_hora_esterilizacion = data.nuevaEsterilizacion
+                    fecha_hora_esterilizacion = data.nuevaEsterilizacion.strftime("%Y-%m-%d %H:%M:%S")  
                 else:
                     try:
                         fecha_hora_esterilizacion = datetime.strptime(data.nuevaEsterilizacion, "%Y-%m-%d %H:%M:%S")
@@ -1650,6 +1728,40 @@ async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Resp
                         return {"message": "Formato de fecha/hora inválido. Debe ser YYYY-MM-DD HH:MM:SS"}
                 campos_actualizar.append("ultimaEsterilizacion = %s")
                 valores.append(fecha_hora_esterilizacion)
+
+            if data.idEquipo is None and id_equipo_actual:
+                cursor.execute("""
+                    UPDATE Equipo_Instrumento 
+                    SET cantidad = GREATEST(cantidad - 1, 0) 
+                    WHERE idEquipo = %s AND idInstrumento = (SELECT idInstrumentoGrupo FROM IInstrumento WHERE idInstrumentoIndividual = %s)
+                """, (id_equipo_actual, data.idInstrumentoIndividual))
+                campos_actualizar.append("idEquipo = NULL")
+
+            if data.idPaquete is None and id_paquete_actual:
+                cursor.execute("""
+                    UPDATE Paquete_Instrumento 
+                    SET cantidad = GREATEST(cantidad - 1, 0) 
+                    WHERE idPaquete = %s AND idInstrumento = (SELECT idInstrumentoGrupo FROM IInstrumento WHERE idInstrumentoIndividual = %s)
+                """, (id_paquete_actual, data.idInstrumentoIndividual))
+                campos_actualizar.append("idPaquete = NULL")
+
+            if data.idEquipo and data.idEquipo != id_equipo_actual:
+                cursor.execute("""
+                    INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
+                    VALUES (%s, (SELECT idInstrumentoGrupo FROM IInstrumento WHERE idInstrumentoIndividual = %s), 1)
+                    ON DUPLICATE KEY UPDATE cantidad = cantidad + 1
+                """, (data.idEquipo, data.idInstrumentoIndividual))
+                campos_actualizar.append("idEquipo = %s")
+                valores.append(data.idEquipo)
+
+            if data.idPaquete and data.idPaquete != id_paquete_actual:
+                cursor.execute("""
+                    INSERT INTO Paquete_Instrumento (idPaquete, idInstrumento, cantidad)
+                    VALUES (%s, (SELECT idInstrumentoGrupo FROM IInstrumento WHERE idInstrumentoIndividual = %s), 1)
+                    ON DUPLICATE KEY UPDATE cantidad = cantidad + 1
+                """, (data.idPaquete, data.idInstrumentoIndividual))
+                campos_actualizar.append("idPaquete = %s")
+                valores.append(data.idPaquete)
 
             if not campos_actualizar:
                 response.status_code = status.HTTP_400_BAD_REQUEST
@@ -1668,7 +1780,6 @@ async def actualizar_instrumento(data: UpdateIInstrumentoRequest, response: Resp
 
     finally:
         connection.close()
-
 
 
 @app.post("/postEquipo")
@@ -1800,12 +1911,7 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar si se proporciona ID o nombre del equipo
             if data.idEquipo:
                 cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
                 equipo = cursor.fetchone()
@@ -1820,11 +1926,16 @@ async def eliminar_equipo(data: DeleteEquipoRequest, response: Response):
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "Equipo no encontrado"}
 
-            cursor.execute("DELETE FROM Equipo_Instrumento WHERE idEquipo = %s", (equipo[0],))
-            cursor.execute("DELETE FROM Equipo WHERE idEquipo = %s", (equipo[0],))
+            idEquipo = equipo[0]
+
+            cursor.execute("DELETE FROM Equipo_Instrumento WHERE idEquipo = %s", (idEquipo,))
+
+            cursor.execute("UPDATE IInstrumento SET idEquipo = NULL WHERE idEquipo = %s", (idEquipo,))
+
+            cursor.execute("DELETE FROM Equipo WHERE idEquipo = %s", (idEquipo,))
 
             connection.commit()
-            return {"message": f"Equipo {equipo[0]} eliminado correctamente junto con sus herramientas asociadas"}
+            return {"message": f"Equipo {idEquipo} eliminado correctamente junto con sus relaciones asociadas"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1846,14 +1957,23 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
                 return {"message": "Equipo no encontrado"}
 
             for herramienta in data.herramientas:
-                idInstrumento = herramienta["idInstrumento"]
+                idInstrumento = herramienta.get("idInstrumento")
+                nombreInstrumento = herramienta.get("nombreInstrumento")
                 cantidad = herramienta["cantidad"]
 
                 if cantidad <= 0:  
                     response.status_code = status.HTTP_400_BAD_REQUEST
                     return {"message": f"No se puede agregar un instrumento con cantidad {cantidad}"}
 
-                # Obtener cantidad total disponible en inventario
+                if nombreInstrumento and not idInstrumento:
+                    cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
+                    instrumento_existente = cursor.fetchone()
+                    if not instrumento_existente:
+                        response.status_code = status.HTTP_404_NOT_FOUND
+                        return {"message": f"Instrumento '{nombreInstrumento}' no encontrado"}
+                    idInstrumento = instrumento_existente[0]
+
+                # Validar existencia de instrumento
                 cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
                 instrumento_existente = cursor.fetchone()
                 if not instrumento_existente:
@@ -1872,15 +1992,24 @@ async def actualizar_herramientas_equipo(data: UpdateEquipoInstrumentoRequest, r
                     response.status_code = status.HTTP_400_BAD_REQUEST
                     return {"message": f"No hay suficientes unidades disponibles del instrumento {idInstrumento}. Quedan {cantidad_restante} disponibles."}
 
-                # Insertar o actualizar la cantidad en el equipo
+                # Insertar o actualizar la cantidad en `Equipo_Instrumento`
                 cursor.execute("""
                     INSERT INTO Equipo_Instrumento (idEquipo, idInstrumento, cantidad)
                     VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE cantidad = %s
+                    ON DUPLICATE KEY UPDATE cantidad = cantidad + %s
                 """, (data.idEquipo, idInstrumento, cantidad, cantidad))
 
+                # ✅ **Actualizar `idEquipo` en `IInstrumento` para reflejar la asignación**
+                cursor.execute("""
+                    UPDATE IInstrumento 
+                    SET idEquipo = %s 
+                    WHERE idInstrumentoGrupo = %s 
+                    AND idEquipo IS NULL 
+                    LIMIT %s
+                """, (data.idEquipo, idInstrumento, cantidad))
+
             connection.commit()
-            return {"message": "Cantidad de herramientas modificada correctamente"}
+            return {"message": "Cantidad de herramientas modificada correctamente y asignación reflejada en Instrumentos"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1895,12 +2024,7 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar que el equipo exista
             cursor.execute("SELECT idEquipo FROM Equipo WHERE idEquipo = %s", (data.idEquipo,))
             equipo_existente = cursor.fetchone()
             if not equipo_existente:
@@ -1913,7 +2037,8 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
                 idInstrumento = herramienta.get("idInstrumento")
                 nombreInstrumento = herramienta.get("nombreInstrumento")
 
-                if nombreInstrumento:
+                # 🚀 **Si se envía nombreInstrumento, obtener su ID**
+                if nombreInstrumento and not idInstrumento:
                     cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
                     instrumento_data = cursor.fetchone()
                     if not instrumento_data:
@@ -1921,6 +2046,7 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
                         return {"message": f"Instrumento con nombre '{nombreInstrumento}' no encontrado"}
                     idInstrumento = instrumento_data[0]
 
+                # Validar existencia en `Equipo_Instrumento`
                 cursor.execute("SELECT cantidad FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s",
                                (data.idEquipo, idInstrumento))
                 instrumento_equipo = cursor.fetchone()
@@ -1928,8 +2054,14 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": f"Instrumento con id {idInstrumento} no está en el equipo"}
 
+                # 🚨 **Eliminar relación en `Equipo_Instrumento`**
                 cursor.execute("DELETE FROM Equipo_Instrumento WHERE idEquipo = %s AND idInstrumento = %s",
                                (data.idEquipo, idInstrumento))
+
+                # ✅ **Eliminar asignación en `IInstrumento`**
+                cursor.execute("UPDATE IInstrumento SET idEquipo = NULL WHERE idInstrumentoGrupo = %s AND idEquipo = %s",
+                               (idInstrumento, data.idEquipo))
+
                 eliminados.append(f"ID {idInstrumento}" if nombreInstrumento is None else f"Nombre '{nombreInstrumento}'")
 
             connection.commit()
@@ -1941,7 +2073,6 @@ async def eliminar_herramientas_equipo(data: DeleteEquipoInstrumentoRequest, res
 
     finally:
         connection.close()
-
 
 @app.post("/postPaquete")
 async def crear_paquete(data: PostPaqueteRequest, response: Response):
@@ -1974,7 +2105,6 @@ async def crear_paquete(data: PostPaqueteRequest, response: Response):
 
     finally:
         connection.close()
-
 
 @app.get("/getPaquetes")
 async def obtener_todos_los_paquetes(response: Response):
@@ -2155,13 +2285,7 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar si se proporciona ID o nombre del paquete
             if data.idPaquete:
                 cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
                 paquete_existente = cursor.fetchone()
@@ -2181,12 +2305,17 @@ async def eliminar_paquete(data: DeletePaqueteRequest, response: Response):
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": "Paquete no encontrado"}
 
-            cursor.execute("DELETE FROM Paquete_Equipo WHERE idPaquete = %s", (data.idPaquete,))
-            cursor.execute("DELETE FROM Paquete_Instrumento WHERE idPaquete = %s", (data.idPaquete,))
-            cursor.execute("DELETE FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
+            idPaquete = data.idPaquete
+
+            cursor.execute("DELETE FROM Paquete_Equipo WHERE idPaquete = %s", (idPaquete,))
+            cursor.execute("DELETE FROM Paquete_Instrumento WHERE idPaquete = %s", (idPaquete,))
+
+            cursor.execute("UPDATE IInstrumento SET idPaquete = NULL WHERE idPaquete = %s", (idPaquete,))
+
+            cursor.execute("DELETE FROM Paquete WHERE idPaquete = %s", (idPaquete,))
 
             connection.commit()
-            return {"message": f"Paquete {data.idPaquete} eliminado correctamente junto con sus asociaciones"}
+            return {"message": f"Paquete {idPaquete} eliminado correctamente junto con sus asociaciones"}
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -2201,12 +2330,7 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar existencia del paquete
             cursor.execute("SELECT idPaquete FROM Paquete WHERE idPaquete = %s", (data.idPaquete,))
             paquete_existente = cursor.fetchone()
             if not paquete_existente:
@@ -2215,10 +2339,11 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
 
             eliminados = []  
             agregados = []  
+            cantidad_total_agregada = 0  
 
             for instrumento in data.instrumentos:
                 idInstrumento = instrumento["idInstrumento"]
-                cantidad = instrumento["cantidad"]
+                cantidad_solicitada = instrumento["cantidad"]
 
                 cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
                 instrumento_existente = cursor.fetchone()
@@ -2226,36 +2351,40 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
                     response.status_code = status.HTTP_404_NOT_FOUND
                     return {"message": f"Instrumento con id {idInstrumento} no encontrado"}
 
-                cantidad_disponible_g = instrumento_existente[0]
+                cursor.execute("""
+                    SELECT COUNT(*) FROM IInstrumento 
+                    WHERE idInstrumentoGrupo = %s 
+                    AND idEquipo IS NULL 
+                    AND idPaquete IS NULL
+                """, (idInstrumento,))
+                cantidad_disponible = cursor.fetchone()[0]
 
-                cursor.execute("SELECT SUM(cantidad) FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
-                cantidad_en_equipos = cursor.fetchone()[0] or 0
-
-                cantidad_total_disponible = cantidad_disponible_g - cantidad_en_equipos
-
-                if cantidad > cantidad_total_disponible:
+                if cantidad_disponible == 0:
                     response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"La cantidad requerida ({cantidad}) excede la disponibilidad ({cantidad_total_disponible})"}
+                    return {"message": f"No hay instrumentos disponibles del grupo {idInstrumento} para asignar al paquete"}
+
+                cantidad_a_insertar = min(cantidad_solicitada, cantidad_disponible)
+                cantidad_total_agregada += cantidad_a_insertar  
 
                 cursor.execute("SELECT cantidad FROM Paquete_Instrumento WHERE idPaquete = %s AND idInstrumento = %s",
                                (data.idPaquete, idInstrumento))
                 instrumento_paquete = cursor.fetchone()
 
-                if cantidad == 0:
+                if cantidad_a_insertar == 0:
                     cursor.execute("DELETE FROM Paquete_Instrumento WHERE idPaquete = %s AND idInstrumento = %s", 
                                    (data.idPaquete, idInstrumento))
-                    eliminados.append(idInstrumento) 
+                    eliminados.append(idInstrumento)  
                 elif instrumento_paquete:
                     cursor.execute("""
                         UPDATE Paquete_Instrumento 
                         SET cantidad = %s 
                         WHERE idPaquete = %s AND idInstrumento = %s
-                    """, (cantidad, data.idPaquete, idInstrumento))
+                    """, (cantidad_a_insertar, data.idPaquete, idInstrumento))
                 else:
                     cursor.execute("""
                         INSERT INTO Paquete_Instrumento (idPaquete, idInstrumento, cantidad)
                         VALUES (%s, %s, %s)
-                    """, (data.idPaquete, idInstrumento, cantidad))
+                    """, (data.idPaquete, idInstrumento, cantidad_a_insertar))
                     agregados.append(idInstrumento)
 
             connection.commit()
@@ -2268,7 +2397,10 @@ async def actualizar_instrumentos_paquete(data: PaqueteInstrumento, response: Re
             if not mensajes:
                 mensajes.append("Instrumentos actualizados correctamente en el paquete")
 
-            return {"message": " | ".join(mensajes)}
+            return {
+                "message": " | ".join(mensajes),
+                "cantidad_total_agregada": cantidad_total_agregada  # 🚀 **Incluye cantidad total agregada**
+            }
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -2335,7 +2467,6 @@ async def agregar_equipos_paquete(data: PaqueteEquipo, response: Response):
 
     finally:
         connection.close()
-
 
 @app.delete("/deletePaqueteEquipo")
 async def eliminar_paquete_equipo(data: DeletePaqueteEquipoRequest, response: Response):
@@ -2662,68 +2793,54 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar que el pedido existe
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
             if not pedido_existente:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 return {"message": f"Pedido con id {data.idPedido} no encontrado"}
 
+            cantidad_total_agregada = 0  
+
             for instrumento in data.instrumentos:
                 idInstrumento = instrumento.idInstrumento
                 nombreInstrumento = instrumento.nombreInstrumento
-                cantidad = instrumento.cantidad
 
                 if not idInstrumento and nombreInstrumento:
                     cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
-                    instrumento_data = cursor.fetchone()
-                    if not instrumento_data:
+                    instrumento_grupo = cursor.fetchone()
+                    if not instrumento_grupo:
                         response.status_code = status.HTTP_404_NOT_FOUND
                         return {"message": f"Instrumento con nombre '{nombreInstrumento}' no encontrado"}
-                    idInstrumento = instrumento_data[0]  
+                    idInstrumentoGrupo = instrumento_grupo[0]
 
-                cursor.execute("SELECT Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
-                instrumento_existente = cursor.fetchone()
-                if not instrumento_existente:
-                    response.status_code = status.HTTP_404_NOT_FOUND
-                    return {"message": f"Instrumento con id {idInstrumento} no encontrado"}
+                    cursor.execute("""
+                        SELECT idInstrumentoIndividual FROM IInstrumento 
+                        WHERE idInstrumentoGrupo = %s 
+                        AND idEquipo IS NULL 
+                        AND idPaquete IS NULL 
+                        LIMIT 1
+                    """, (idInstrumentoGrupo,))
+                    instrumento_disponible = cursor.fetchone()
 
-                cantidad_disponible = instrumento_existente[0]
+                    if not instrumento_disponible:
+                        response.status_code = status.HTTP_400_BAD_REQUEST
+                        return {"message": f"No hay instrumentos disponibles para '{nombreInstrumento}'"}
 
-                cursor.execute("""
-                    SELECT COALESCE(SUM(cantidad), 0) FROM Paquete_Instrumento WHERE idInstrumento = %s
-                """, (idInstrumento,))
-                cantidad_en_paquetes = cursor.fetchone()[0]
-
-                cursor.execute("""
-                    SELECT COALESCE(SUM(cantidad), 0) FROM Equipo_Instrumento WHERE idInstrumento = %s
-                """, (idInstrumento,))
-                cantidad_en_equipos = cursor.fetchone()[0]
+                    idInstrumento = instrumento_disponible[0]  # Asignar el `idInstrumentoIndividual` disponible
 
                 cursor.execute("""
-                    SELECT COALESCE(SUM(cantidad), 0) FROM Pedido_IInstrumento WHERE idInstrumento = %s
-                """, (idInstrumento,))
-                cantidad_en_pedidos = cursor.fetchone()[0]
+                    INSERT INTO Pedido_IInstrumento (idPedido, idInstrumento) 
+                    VALUES (%s, %s)
+                """, (data.idPedido, idInstrumento))
 
-                cantidad_total_usada = cantidad_en_equipos + cantidad_en_paquetes + cantidad_en_pedidos
-
-                if cantidad_total_usada + cantidad > cantidad_disponible:
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"La cantidad requerida ({cantidad}) excede la disponibilidad ({cantidad_disponible - cantidad_total_usada}) en el almacén"}
-
-                cursor.execute("""
-                    INSERT INTO Pedido_IInstrumento (idPedido, idInstrumento, cantidad)
-                    VALUES (%s, %s, %s)
-                """, (data.idPedido, idInstrumento, cantidad))
+                cantidad_total_agregada += 1  # 🚀 **Sumar al total agregado**
 
             connection.commit()
-            return {"message": "Instrumentos agregados correctamente al pedido"}
+            return {
+                "message": "Instrumentos agregados correctamente al pedido",
+                "cantidad_total_agregada": cantidad_total_agregada  # 🚀 **Incluye cantidad total agregada**
+            }
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -2733,18 +2850,12 @@ async def agregar_instrumentos_pedido(data: PedidoInstrumento, response: Respons
         connection.close()
 
 
-@app.put("/updatePedidoInstrumento")
-async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
+@app.delete("/deletePedidoInstrumento")
+async def eliminar_instrumentos_pedido(data: PedidoInstrumento, response: Response):
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # payload = utils.verify_token(token)
-            # if payload["rol"] != "Administrador":
-            #     response.status_code = status.HTTP_403_FORBIDDEN
-            #     return {"message": "No tienes permiso para acceder a esta ruta"}
-
-            # cursor.execute("SET @idUsuario = %s", (payload["idUsuario"]))
-
+            # Validar que el pedido existe
             cursor.execute("SELECT idPedido FROM Pedido WHERE idPedido = %s", (data.idPedido,))
             pedido_existente = cursor.fetchone()
             if not pedido_existente:
@@ -2756,64 +2867,44 @@ async def actualizar_instrumentos_pedido(data: PedidoInstrumento, response: Resp
             for instrumento in data.instrumentos:
                 idInstrumento = instrumento.idInstrumento  
                 nombreInstrumento = instrumento.nombreInstrumento  
-                cantidad = instrumento.cantidad  
 
                 if not idInstrumento and nombreInstrumento:
                     cursor.execute("SELECT idInstrumento FROM GInstrumento WHERE Nombre = %s", (nombreInstrumento,))
-                    instrumento_data = cursor.fetchone()
-                    if not instrumento_data:
+                    instrumento_grupo = cursor.fetchone()
+                    if not instrumento_grupo:
                         response.status_code = status.HTTP_404_NOT_FOUND
                         return {"message": f"Instrumento con nombre '{nombreInstrumento}' no encontrado"}
-                    idInstrumento = instrumento_data[0]
+                    idInstrumentoGrupo = instrumento_grupo[0]
 
-                cursor.execute("SELECT Nombre, Cantidad FROM GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
-                instrumento_existente = cursor.fetchone()
-                if not instrumento_existente:
-                    response.status_code = status.HTTP_404_NOT_FOUND
-                    return {"message": f"Instrumento con id {idInstrumento} no encontrado"}
-
-                nombreInstrumento = instrumento_existente[0] 
-                cantidad_disponible = instrumento_existente[1]
-
-                cursor.execute("SELECT COALESCE(SUM(cantidad), 0) FROM Paquete_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
-                cantidad_en_paquetes = cursor.fetchone()[0]
-
-                cursor.execute("SELECT COALESCE(SUM(cantidad), 0) FROM Equipo_Instrumento WHERE idInstrumento = %s", (idInstrumento,))
-                cantidad_en_equipos = cursor.fetchone()[0]
-
-                cursor.execute("SELECT COALESCE(SUM(cantidad), 0) FROM Pedido_GInstrumento WHERE idInstrumento = %s", (idInstrumento,))
-                cantidad_en_pedidos = cursor.fetchone()[0]
-
-                cantidad_total_usada = cantidad_en_equipos + cantidad_en_paquetes + cantidad_en_pedidos
-
-                if cantidad_total_usada + cantidad > cantidad_disponible:
-                    response.status_code = status.HTTP_400_BAD_REQUEST
-                    return {"message": f"La cantidad requerida ({cantidad}) excede la disponibilidad ({cantidad_disponible - cantidad_total_usada}) en el almacén"}
-
-                cursor.execute("SELECT cantidad FROM Pedido_GInstrumento WHERE idPedido = %s AND idInstrumento = %s", (data.idPedido, idInstrumento))
-                instrumento_pedido = cursor.fetchone()
-
-                if cantidad == 0:
-                    cursor.execute("DELETE FROM Pedido_GInstrumento WHERE idPedido = %s AND idInstrumento = %s", (data.idPedido, idInstrumento))
-                    eliminados.append(nombreInstrumento)  
-                elif instrumento_pedido:
                     cursor.execute("""
-                        UPDATE Pedido_GInstrumento 
-                        SET cantidad = %s 
-                        WHERE idPedido = %s AND idInstrumento = %s
-                    """, (cantidad, data.idPedido, idInstrumento))
-                else:
-                    cursor.execute("""
-                        INSERT INTO Pedido_GInstrumento (idPedido, idInstrumento, cantidad)
-                        VALUES (%s, %s, %s)
-                    """, (data.idPedido, idInstrumento, cantidad))
+                        SELECT idInstrumento FROM Pedido_IInstrumento 
+                        WHERE idPedido = %s AND idInstrumento IN (
+                            SELECT idInstrumentoIndividual FROM IInstrumento 
+                            WHERE idInstrumentoGrupo = %s
+                        ) 
+                        LIMIT 1
+                    """, (data.idPedido, idInstrumentoGrupo))
+                    instrumento_pedido = cursor.fetchone()
+
+                    if not instrumento_pedido:
+                        response.status_code = status.HTTP_404_NOT_FOUND
+                        return {"message": f"No hay instrumentos disponibles en el pedido para '{nombreInstrumento}'"}
+
+                    idInstrumento = instrumento_pedido[0]
+
+                cursor.execute("DELETE FROM Pedido_IInstrumento WHERE idPedido = %s AND idInstrumento = %s",
+                               (data.idPedido, idInstrumento))
+
+                eliminados.append(nombreInstrumento if nombreInstrumento else f"ID {idInstrumento}")
 
             connection.commit()
-            
-            if eliminados:
-                return {"message": f"Instrumentos eliminados: {', '.join(eliminados)}"}  # ✅ Muestra nombres eliminados
-            
-            return {"message": "Instrumentos actualizados correctamente en el pedido"}
+
+            respuesta = {
+                "message": "Instrumentos eliminados correctamente del pedido",
+                "instrumentos_eliminados": eliminados
+            }
+
+            return respuesta
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
