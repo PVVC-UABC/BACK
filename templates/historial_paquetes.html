@@ -2,75 +2,48 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historial de Paquetes</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f4f4f4;
-        }
-        .footer {
-            margin-top: 20px;
-            text-align: center;
-            font-size: 12px;
-        }
+        body { font-family: Arial, sans-serif; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
     </style>
 </head>
 <body>
+
     <h1>Historial de Paquetes</h1>
-    <p>Fecha del reporte: {{ fecha_reporte }}</p>
+    <p>Fecha de reporte: {{ fecha_reporte }}</p>
 
     <table>
-        <thead>
-            <tr>
-                <th>Nombre del Paquete</th>
-                <th>Nombre del Equipo</th>
-                <th>Nombre del Instrumento</th>
-                <th>Tipo de Operación</th>
-                <th>Campo Modificado</th>
-                <th>Valor Anterior</th>
-                <th>Valor Nuevo</th>
-                <th>Observaciones</th>
-                <th>Fecha de Cambio</th>
-                <th>Usuario</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for paquete in historial_paquetes %}
-            <tr>
-                <td>{{ paquete[1] }}</td>  <!-- Nombre del Paquete -->
-                <td>{{ paquete[9] }}</td>  <!-- Nombre del Equipo -->
-                <td>{{ paquete[10] }}</td>  <!-- Nombre del Instrumento -->
-                <td>{{ paquete[2] }}</td>  <!-- Tipo de Operación -->
-                <td>{{ paquete[3] }}</td>  <!-- Campo Modificado -->
-                <td>{{ paquete[4] if paquete[4] else "N/A" }}</td>  <!-- Valor Anterior -->
-                <td>{{ paquete[5] if paquete[5] else "N/A" }}</td>  <!-- Valor Nuevo -->
-                <td>{{ paquete[6] if paquete[6] else "Sin observaciones" }}</td>  <!-- Observaciones -->
-                <td>{{ paquete[7] }}</td>  <!-- Fecha de Cambio -->
-                <td>{{ paquete[8] }}</td>  <!-- Usuario -->
-            </tr>
+        <tr>
+            <th>ID Historial</th>
+            <th>ID Paquete</th>
+            <th>Nombre del Paquete</th>
+            <th>Equipo Asociado</th>
+            <th>Instrumento Asociado</th>
+            <th>Observaciones</th>
+            <th>Fecha de Cambio</th>
+            <th>Usuario</th>
+        </tr>
+        {% if paquetes_por_historial %}
+            {% for id_historial, paquete in paquetes_por_historial.items() %}
+                <tr>
+                    <td>{{ id_historial }}</td>
+                    <td>{{ paquete.idPaquete }}</td>
+                    <td>{{ paquete.nombrePaquete }}</td>
+                    <td>{{ paquete.nombreEquipo }}</td>
+                    <td>{{ paquete.nombreInstrumento }}</td>
+                    <td>{{ paquete.observaciones }}</td>
+                    <td>{{ paquete.fechaCambio }}</td>
+                    <td>{{ paquete.usuario }}</td>
+                </tr>
             {% endfor %}
-        </tbody>
+        {% else %}
+            <tr><td colspan="8">No hay historial de paquetes disponible.</td></tr>
+        {% endif %}
     </table>
 
-    <div class="footer">
-        <p>Reporte generado automáticamente por el sistema.</p>
-    </div>
 </body>
 </html>
