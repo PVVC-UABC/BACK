@@ -33,9 +33,13 @@
                     <td>{{ equipo.nombreEquipo }}</td>
                     <td>
                         <ul>
-                        {% for instrumento in equipo.instrumentos %}
-                            <li>{{ instrumento.nombreInstrumento }} ({{ instrumento.cantidad }})</li>
-                        {% endfor %}
+                        {% if equipo.instrumentos %}
+                            {% for instrumento in equipo.instrumentos %}
+                                <li>{{ instrumento.nombreInstrumento }} ({{ instrumento.cantidad }})</li>
+                            {% endfor %}
+                        {% else %}
+                            <li>No hay instrumentos asignados</li>
+                        {% endif %}
                         </ul>
                     </td>
                 </tr>
@@ -47,16 +51,13 @@
 
         <h3>Instrumentos Grupales del Pedido</h3>
         <table>
-            <tr><th>Instrumento</th><th>Cantidad</th></tr>
+            <tr><th>Instrumento</th><th>Código de Barras</th></tr>
             {% for instrumento in pedido.instrumentos_grupo %}
                 <tr>
                     <td>{{ instrumento.nombreInstrumentoGrupo }}</td>
-                    <td>{{ instrumento.cantidad }}</td>
+                    <td>{{ instrumento.codigoBarras }}</td>
                 </tr>
             {% endfor %}
-            <tr>
-                <td colspan="2"><strong>Total de instrumentos grupales:</strong> {{ pedido.total_instrumentos_grupo }}</td>
-            </tr>
         </table>
 
         <h3>Paquete - Equipos</h3>

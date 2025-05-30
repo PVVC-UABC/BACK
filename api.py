@@ -206,20 +206,20 @@ class UpdatePaqueteRequest(BaseModel):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
 
-
-
 def obtener_datos_historial_paquetes():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT hp.idHistorialPaquete, p.Nombre AS nombrePaquete, hp.tipoOperacion, 
-                       hp.campo, hp.valorAnterior, hp.valorNuevo, hp.observaciones, hp.fechaCambio, 
-                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
+                SELECT hp.idHistorialPaquete, hp.idPaquete, hp.tipoOperacion, 
+                       hp.observaciones, hp.fechaCambio, 
+                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario,
+                       hp.nombrePaquetePrevio, p.Nombre AS nombrePaqueteActual,
+                       hp.idEquipo, hp.idInstrumento
                 FROM Historial_Paquetes hp
                 LEFT JOIN Paquete p ON hp.idPaquete = p.idPaquete
                 LEFT JOIN Usuario u ON hp.idUsuario = u.idUsuario
-                ORDER BY hp.fechaCambio DESC;
+                ORDER BY hp.idHistorialPaquete ASC;
             """)
             historial_paquetes = cursor.fetchall()
 
@@ -230,20 +230,52 @@ def obtener_datos_historial_paquetes():
             equipos_por_id = {row[0]: row[1] for row in cursor.fetchall()}
 
             cursor.execute("""
+                SELECT he.idEquipo, he.nombreEquipoPrevio
+                FROM Historial_Equipos he;
+            """)
+            historial_equipos_por_id = {row[0]: row[1] for row in cursor.fetchall()}
+
+            cursor.execute("""
                 SELECT gi.idInstrumento, gi.Nombre AS nombreInstrumento
                 FROM GInstrumento gi;
             """)
             instrumentos_por_id = {row[0]: row[1] for row in cursor.fetchall()}
 
+            cursor.execute("""
+                SELECT hgi.idInstrumento, hgi.nombreInstrumentoPrevio
+                FROM Historial_GInstrumento hgi;
+            """)
+            historial_instrumentos_por_id = {row[0]: row[1] for row in cursor.fetchall()}
+
             historial_completo = []
+            paquetes_por_historial = {}
+
             for paquete in historial_paquetes:
-                nombreEquipo = equipos_por_id.get(paquete[0], "Sin equipo asociado")
-                nombreInstrumento = instrumentos_por_id.get(paquete[0], "Sin instrumento asociado")
-                
-                historial_completo.append(paquete + (nombreEquipo, nombreInstrumento))
+                id_paquete = paquete[1]
+                id_equipo = paquete[8]
+                id_instrumento = paquete[9]
+
+                nombrePaquete = paquete[6] if paquete[2] == "Eliminado" and paquete[6] else paquete[7]
+                nombreEquipo = equipos_por_id.get(id_equipo, historial_equipos_por_id.get(id_equipo, "Sin equipo asociado"))
+                nombreInstrumento = instrumentos_por_id.get(id_instrumento, historial_instrumentos_por_id.get(id_instrumento, "Sin instrumento asociado"))
+
+                paquete_data = {
+                    "idHistorialPaquete": paquete[0],
+                    "idPaquete": id_paquete if id_paquete else "Sin ID",
+                    "nombrePaquete": nombrePaquete,
+                    "nombreEquipo": nombreEquipo, 
+                    "nombreInstrumento": nombreInstrumento, 
+                    "observaciones": paquete[3],
+                    "fechaCambio": paquete[4],
+                    "usuario": paquete[5]
+                }
+
+                historial_completo.append(paquete_data)
+                paquetes_por_historial[paquete_data["idHistorialPaquete"]] = paquete_data
 
         return {
             "historial_paquetes": historial_completo,
+            "paquetes_por_historial": paquetes_por_historial,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
     except pymysql.Error as e:
@@ -251,6 +283,7 @@ def obtener_datos_historial_paquetes():
         return None
     finally:
         connection.close()
+
 
 def generar_pdf_historial_paquetes():
     """Genera un PDF con el historial de paquetes usando Jinja2."""
@@ -266,6 +299,7 @@ def generar_pdf_historial_paquetes():
 
     # Convertir el HTML renderizado en un objeto PDF en memoria
     return io.BytesIO(html_renderizado.encode("utf-8"))
+
 
 def obtener_datos_historial_pedido():
     try:
@@ -523,71 +557,69 @@ def obtener_datos_paquete():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
+            # 🚀 Obtener los paquetes y sus equipos desde `Paquete_Equipo`
             cursor.execute("""
-                SELECT hp.idHistorialPaquete,  -- 🚀 ID Historial
-                       p.idPaquete,  -- 🚀 ID Paquete  
-                       COALESCE(p.Nombre, hp.nombrePaquetePrevio) AS nombrePaquete,  
-                       p.idEspecialidad, 
-                       e.idEquipo,  
-                       COALESCE(e.Nombre, he.nombreEquipoPrevio) AS nombreEquipo,  
-                       gi.idInstrumento AS idInstrumentoGrupo, 
-                       COALESCE(gi.Nombre, hg.nombreInstrumentoPrevio) AS nombreInstrumento,  
-                       gi.CodigoDeBarras AS codigoInstrumento, 
-                       COALESCE(ei.cantidad, 0) AS cantidad_instrumento_equipo,  
-                       hp.observaciones, hp.fechaCambio,  
-                       COALESCE(CONCAT(u.Nombres, ' ', u.ApellidoPaterno, ' ', COALESCE(u.ApellidoMaterno, '')), 'Usuario desconocido') AS usuario
-                FROM Historial_Paquete hp
-                LEFT JOIN Paquete p ON hp.idPaquete = p.idPaquete  
+                SELECT p.idPaquete, p.Nombre AS nombrePaquete, p.idEspecialidad,
+                       e.idEquipo, e.Nombre AS nombreEquipo,
+                       gi.idInstrumento, gi.Nombre AS nombreInstrumento,
+                       gi.CodigoDeBarras, COALESCE(ei.cantidad, 0) AS cantidadInstrumento
+                FROM Paquete p
                 LEFT JOIN Paquete_Equipo pe ON p.idPaquete = pe.idPaquete
                 LEFT JOIN Equipo e ON pe.idEquipo = e.idEquipo
-                LEFT JOIN Historial_Equipos he ON he.idEquipo = e.idEquipo  
                 LEFT JOIN Equipo_Instrumento ei ON e.idEquipo = ei.idEquipo
                 LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                LEFT JOIN Historial_GInstrumento hg ON hg.idInstrumento = gi.idInstrumento  
-                LEFT JOIN Usuario u ON hp.idUsuario = u.idUsuario
-                ORDER BY hp.idHistorialPaquete ASC;
+                ORDER BY p.idPaquete, e.idEquipo, gi.idInstrumento ASC;
             """)
             paquete_datos = cursor.fetchall()
 
-        # 🚀 Convertir cada tupla en una lista para que sea editable
-        paquete_datos = [list(registro) for registro in paquete_datos]
+            cursor.execute("""
+                SELECT p.idPaquete, gi.idInstrumento, gi.Nombre, gi.CodigoDeBarras, COALESCE(pi.cantidad, 0)
+                FROM Paquete p
+                LEFT JOIN Paquete_Instrumento pi ON p.idPaquete = pi.idPaquete
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY p.idPaquete, gi.idInstrumento ASC;
+            """)
+            paquete_instrumentos = cursor.fetchall()
 
-        # 🚀 **Asignar el mismo `nombrePaquetePrevio` a registros con el mismo `idPaquete`**
-        nombre_paquete_por_id = {}
-        for registro in paquete_datos:
-            id_historial_paquete = registro[0]  # 🚀 ID Historial
-            id_paquete = registro[1]  # 🚀 ID Paquete
-            nombre_paquete = registro[2]
+        paquetes_por_grupo = {}
+        for item in paquete_datos:
+            id_paquete = item[0]
+            if id_paquete not in paquetes_por_grupo:
+                paquetes_por_grupo[id_paquete] = {
+                    "nombrePaquete": item[1],
+                    "idEspecialidad": item[2],
+                    "datos": [],
+                    "instrumentos_paquete": [],
+                    "cantidad_total_instrumentos": 0,
+                    "cantidad_total_instrumentos_paquete": 0
+                }
 
-            if id_paquete in nombre_paquete_por_id and (nombre_paquete is None or nombre_paquete == ''):
-                registro[2] = nombre_paquete_por_id[id_paquete]
-            elif nombre_paquete:  
-                nombre_paquete_por_id[id_paquete] = nombre_paquete
+            paquete_info = [
+                item[3],  # ID Equipo
+                item[4],  # Nombre Equipo
+                item[5],  # ID Instrumento
+                item[6],  # Nombre Instrumento
+                item[7],  # Código de Barras
+                item[8]   # Cantidad Instrumento
+            ]
 
-        # 🚀 **Asignar el mismo `nombreEquipoPrevio` a registros con el mismo `idEquipo`**
-        nombre_equipo_por_id = {}
-        for registro in paquete_datos:
-            id_equipo = registro[5]  # 🚀 ID Equipo
-            nombre_equipo = registro[6]  # 🚀 Nombre Equipo
+            paquetes_por_grupo[id_paquete]["datos"].append(paquete_info)
+            paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos"] += item[8]
 
-            if id_equipo in nombre_equipo_por_id and (nombre_equipo is None or nombre_equipo == ''):
-                registro[6] = nombre_equipo_por_id[id_equipo]
-            elif nombre_equipo:  
-                nombre_equipo_por_id[id_equipo] = nombre_equipo
-
-        # 🚀 **Asignar el mismo `nombreInstrumentoPrevio` a registros con el mismo `idInstrumento`**
-        nombre_instrumento_por_id = {}
-        for registro in paquete_datos:
-            id_instrumento = registro[7]  # 🚀 ID Instrumento
-            nombre_instrumento = registro[8]  # 🚀 Nombre Instrumento
-
-            if id_instrumento in nombre_instrumento_por_id and (nombre_instrumento is None or nombre_instrumento == ''):
-                registro[8] = nombre_instrumento_por_id[id_instrumento]
-            elif nombre_instrumento:  
-                nombre_instrumento_por_id[id_instrumento] = nombre_instrumento
+        for item in paquete_instrumentos:
+            id_paquete = item[0]
+            if id_paquete in paquetes_por_grupo:
+                instrumento_info = [
+                    item[1],  # ID Instrumento
+                    item[2],  # Nombre Instrumento
+                    item[3],  # Código de Barras
+                    item[4]   # Cantidad Instrumento
+                ]
+                paquetes_por_grupo[id_paquete]["instrumentos_paquete"].append(instrumento_info)
+                paquetes_por_grupo[id_paquete]["cantidad_total_instrumentos_paquete"] += item[4]
 
         return {
-            "paquete_datos": paquete_datos,
+            "paquetes_por_grupo": paquetes_por_grupo,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
 
@@ -613,19 +645,20 @@ def obtener_datos_pedido():
     try:
         connection = utils.get_connection()
         with connection.cursor() as cursor:
-            # Obtener información del pedido con el nombre del enfermero y paquete asignado
+            # 🚀 Obtener información del pedido con enfermero y paquete asignado
             cursor.execute("""
                 SELECT p.idPedido, p.Fecha, p.Hora, p.Ubicacion, p.Cirugia, p.Estado,
                        CONCAT(u.nombres, ' ', u.apellidoPaterno, ' ', u.apellidoMaterno) AS nombreEnfermero,
-                       pa.idPaquete, pa.Nombre AS nombrePaquete
+                       pa.idPaquete, pa.Nombre AS nombrePaquete, e.Nombre AS especialidad
                 FROM Pedido p
                 LEFT JOIN Usuario u ON p.idEnfermero = u.idUsuario
                 LEFT JOIN Paquete pa ON p.idPaquete = pa.idPaquete
+                LEFT JOIN Especialidad e ON pa.idEspecialidad = e.idEspecialidad
                 ORDER BY p.idPedido ASC;
             """)
             pedidos_datos = cursor.fetchall()
 
-            # Obtener equipos asignados al pedido
+            # 🚀 Obtener equipos asignados al pedido
             cursor.execute("""
                 SELECT pe.idPedido, e.idEquipo, e.Nombre AS nombreEquipo
                 FROM Pedido_Equipo pe
@@ -634,25 +667,25 @@ def obtener_datos_pedido():
             """)
             equipos_pedido_datos = cursor.fetchall()
 
-            # Obtener instrumentos dentro de los equipos
+            # 🚀 Obtener instrumentos dentro de los equipos
             cursor.execute("""
-                SELECT ei.idEquipo, gi.Nombre AS nombreInstrumento, ei.cantidad
+                SELECT ei.idEquipo, gi.idInstrumento, gi.Nombre AS nombreInstrumento, gi.CodigoDeBarras, ei.cantidad
                 FROM Equipo_Instrumento ei
                 LEFT JOIN GInstrumento gi ON ei.idInstrumento = gi.idInstrumento
-                ORDER BY ei.idEquipo, ei.idInstrumento ASC;
+                ORDER BY ei.idEquipo, gi.idInstrumento ASC;
             """)
             instrumentos_equipo_datos = cursor.fetchall()
 
-            # Obtener instrumentos grupales del pedido
+            # 🚀 Obtener instrumentos grupales del pedido desde `Pedido_IInstrumento`
             cursor.execute("""
-                SELECT pg.idPedido, gi.Nombre AS nombreInstrumentoGrupo, pg.cantidad
-                FROM Pedido_GInstrumento pg
-                LEFT JOIN GInstrumento gi ON pg.idInstrumento = gi.idInstrumento
-                ORDER BY pg.idPedido, gi.idInstrumento ASC;
+                SELECT pi.idPedido, gi.idInstrumento, gi.Nombre AS nombreInstrumento, gi.CodigoDeBarras
+                FROM Pedido_IInstrumento pi
+                LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
+                ORDER BY pi.idPedido, gi.idInstrumento ASC;
             """)
-            instrumentos_grupo_pedido_datos = cursor.fetchall()
+            instrumentos_pedido_datos = cursor.fetchall()
 
-            # Obtener los equipos dentro de los paquetes
+            # 🚀 Obtener los equipos dentro del paquete
             cursor.execute("""
                 SELECT pa.idPaquete, e.idEquipo, e.Nombre AS nombreEquipo
                 FROM Paquete_Equipo pe
@@ -662,9 +695,9 @@ def obtener_datos_pedido():
             """)
             paquetes_equipos_datos = cursor.fetchall()
 
-            # Obtener los instrumentos dentro de los paquetes
+            # 🚀 Obtener los instrumentos dentro de los paquetes
             cursor.execute("""
-                SELECT pa.idPaquete, gi.Nombre AS nombreInstrumento, pi.cantidad
+                SELECT pa.idPaquete, gi.idInstrumento, gi.Nombre AS nombreInstrumento, gi.CodigoDeBarras, COALESCE(pi.cantidad, 0)
                 FROM Paquete_Instrumento pi
                 LEFT JOIN Paquete pa ON pi.idPaquete = pa.idPaquete
                 LEFT JOIN GInstrumento gi ON pi.idInstrumento = gi.idInstrumento
@@ -676,7 +709,7 @@ def obtener_datos_pedido():
         paquetes_equipos = {}
         paquetes_instrumentos = {}
 
-        # Organizar pedidos por grupo y calcular totales
+        # 🚀 Organizar pedidos por grupo
         for item in pedidos_datos:
             id_pedido = str(item[0])
             pedidos_por_grupo[id_pedido] = {
@@ -688,13 +721,14 @@ def obtener_datos_pedido():
                 "enfermero": item[6],
                 "idPaquete": str(item[7]),
                 "nombrePaquete": item[8],
+                "especialidad": item[9],
                 "equipos": [],
                 "instrumentos_grupo": [],
                 "total_instrumentos_equipo": 0,
                 "total_instrumentos_grupo": 0
             }
 
-        # Organizar equipos asignados al pedido
+        # 🚀 Organizar equipos asignados al pedido
         for item in equipos_pedido_datos:
             id_pedido = str(item[0])
             id_equipo = str(item[1])
@@ -705,57 +739,37 @@ def obtener_datos_pedido():
                 "total_instrumentos": 0
             })
 
-        # Organizar instrumentos dentro de los equipos
+        # 🚀 Organizar instrumentos dentro de los equipos
         for item in instrumentos_equipo_datos:
             id_equipo = str(item[0])
             for pedido in pedidos_por_grupo.values():
                 for equipo in pedido["equipos"]:
                     if equipo["idEquipo"] == id_equipo:
                         equipo["instrumentos"].append({
-                            "nombreInstrumento": item[1],
-                            "cantidad": item[2]
+                            "idInstrumento": item[1],
+                            "nombreInstrumento": item[2],
+                            "codigoBarras": item[3],
+                            "cantidad": item[4]
                         })
-                        equipo["total_instrumentos"] += item[2]
-                        pedido["total_instrumentos_equipo"] += item[2]
+                        equipo["total_instrumentos"] += item[4]
+                        pedido["total_instrumentos_equipo"] += item[4]
 
-        # Organizar instrumentos grupales del pedido
-        for item in instrumentos_grupo_pedido_datos:
+        # 🚀 Organizar instrumentos grupales del pedido
+        for item in instrumentos_pedido_datos:
             id_pedido = str(item[0])
             pedidos_por_grupo[id_pedido]["instrumentos_grupo"].append({
-                "nombreInstrumentoGrupo": item[1],
-                "cantidad": item[2]
-            })
-            pedidos_por_grupo[id_pedido]["total_instrumentos_grupo"] += item[2]
-
-        # Organizar equipos dentro del paquete
-        for item in paquetes_equipos_datos:
-            id_paquete = str(item[0])
-            if id_paquete not in paquetes_equipos:
-                paquetes_equipos[id_paquete] = {"equipos": [], "total_instrumentos": 0}
-            paquetes_equipos[id_paquete]["equipos"].append({
-                "idEquipo": str(item[1]),
-                "nombreEquipo": item[2],
-                "instrumentos": []
+                "idInstrumento": item[1],
+                "nombreInstrumentoGrupo": item[2],
+                "codigoBarras": item[3]
             })
 
-        # Organizar instrumentos dentro de los paquetes
-        for item in paquetes_instrumentos_datos:
-            id_paquete = str(item[0])
-            for equipo in paquetes_equipos.get(id_paquete, {}).get("equipos", []):
-                equipo["instrumentos"].append({
-                    "nombreInstrumento": item[1],
-                    "cantidad": item[2]
-                })
-                paquetes_equipos[id_paquete]["total_instrumentos"] += item[2]
-
-        datos = {
+        return {
             "pedidos_por_grupo": pedidos_por_grupo,
             "paquetes_equipos": paquetes_equipos,
             "paquetes_instrumentos": paquetes_instrumentos,
             "fecha_reporte": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
 
-        return datos
     except pymysql.Error as e:
         print(f"Error MySQL: {e}")
         return None
@@ -883,6 +897,7 @@ async def descargar_historial_paquetes():
     pdf_file = generar_pdf_historial_paquetes()
     return StreamingResponse(pdf_file, media_type="text/html",
                              headers={"Content-Disposition": "inline; filename=Historial_Paquetes.html"})
+
 
 @app.post("/logout")
 async def root(response: Response):
